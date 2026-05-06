@@ -5,8 +5,10 @@ import '../core/constants/app_colors.dart';
 import '../data/models/home_dashboard_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/home_viewmodel.dart';
+import 'library_page.dart';
 import 'manual_add_book_page.dart';
 import 'widgets/add_book_menu_button.dart';
+import 'widgets/app_bottom_bar.dart';
 
 class HomePage extends StatelessWidget {
   const HomePage({super.key, required this.user, this.token});
@@ -68,6 +70,25 @@ class _HomePageView extends StatelessWidget {
           const SnackBar(content: Text('Tính năng quét ISBN đang được phát triển.')),
         );
         break;
+    }
+  }
+
+  void _handleTabSelection(BuildContext context, AppTab tab) {
+    switch (tab) {
+      case AppTab.home:
+        break;
+      case AppTab.library:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => LibraryPage(user: user, token: token),
+          ),
+        );
+        break;
+      default:
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${tab.label} is coming soon.')),
+        );
     }
   }
 
@@ -140,7 +161,10 @@ class _HomePageView extends StatelessWidget {
           },
         ),
       ),
-      bottomNavigationBar: const _HomeBottomBar(),
+      bottomNavigationBar: AppBottomBar(
+        currentTab: AppTab.home,
+        onTabSelected: (tab) => _handleTabSelection(context, tab),
+      ),
     );
   }
 }
@@ -599,84 +623,6 @@ class _FinishedBookCard extends StatelessWidget {
                     _BookCoverFallback(title: book.title),
               )
             : _BookCoverFallback(title: book.title),
-      ),
-    );
-  }
-}
-
-class _HomeBottomBar extends StatelessWidget {
-  const _HomeBottomBar();
-
-  @override
-  Widget build(BuildContext context) {
-    const items = [
-      (Icons.home_rounded, 'Home'),
-      (Icons.local_library_outlined, 'Library'),
-      (Icons.flag_outlined, 'Challenge'),
-      (Icons.bar_chart_rounded, 'Statistic'),
-      (Icons.person_outline_rounded, 'Account'),
-    ];
-
-    return SafeArea(
-      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withValues(alpha: 0.08),
-              blurRadius: 20,
-              offset: const Offset(0, 10),
-            ),
-          ],
-        ),
-        child: Row(
-          children: List.generate(items.length, (index) {
-            final (icon, label) = items[index];
-            final isSelected = index == 0;
-
-            return Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: isSelected
-                        ? AppColors.primary.withValues(alpha: 0.14)
-                        : Colors.transparent,
-                    borderRadius: BorderRadius.circular(18),
-                  ),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        icon,
-                        color: isSelected
-                            ? AppColors.primary
-                            : AppColors.darkBrown,
-                        size: 22,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        label,
-                        style: TextStyle(
-                          color: isSelected
-                              ? AppColors.primary
-                              : AppColors.darkBrown,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        textAlign: TextAlign.center,
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }),
-        ),
       ),
     );
   }
