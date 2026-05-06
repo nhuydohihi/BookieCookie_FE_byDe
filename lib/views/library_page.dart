@@ -5,6 +5,7 @@ import '../core/constants/app_colors.dart';
 import '../data/models/library_book_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/library_viewmodel.dart';
+import 'book_detail_page.dart';
 import 'home_page.dart';
 import 'manual_add_book_page.dart';
 import 'widgets/app_bottom_bar.dart';
@@ -57,6 +58,24 @@ class _LibraryPageViewState extends State<_LibraryPageView> {
     );
 
     if (created == true) {
+      await libraryVM.loadLibrary();
+    }
+  }
+
+  Future<void> _openBookDetail(BuildContext context, int userBookId) async {
+    final libraryVM = context.read<LibraryViewModel>();
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BookDetailPage(
+          user: widget.user,
+          userBookId: userBookId,
+          token: widget.token,
+        ),
+      ),
+    );
+
+    if (changed == true) {
       await libraryVM.loadLibrary();
     }
   }
@@ -153,6 +172,10 @@ class _LibraryPageViewState extends State<_LibraryPageView> {
                             itemBuilder: (context, index) {
                               return _LibraryBookCard(
                                 book: filteredBooks[index],
+                                onTap: () => _openBookDetail(
+                                  context,
+                                  filteredBooks[index].id,
+                                ),
                               );
                             },
                           ),
@@ -300,14 +323,24 @@ class _LibrarySummary extends StatelessWidget {
 }
 
 class _LibraryBookCard extends StatelessWidget {
-  const _LibraryBookCard({required this.book});
+  const _LibraryBookCard({
+    required this.book,
+    required this.onTap,
+  });
 
   final LibraryBookModel book;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: BoxDecoration(
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(28),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(28),
+        child: Container(
+          decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(28),
         border: Border.all(
@@ -321,72 +354,74 @@ class _LibraryBookCard extends StatelessWidget {
             offset: const Offset(0, 12),
           ),
         ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: ClipRRect(
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(28),
-              ),
-              child: Container(
-                width: double.infinity,
-                color: AppColors.cream,
-                child:
-                    book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty
-                    ? Padding(
-                        padding: const EdgeInsets.all(10),
-                        child: Image.network(
-                          book.coverImageUrl!,
-                          fit: BoxFit.contain,
-                          alignment: Alignment.center,
-                          errorBuilder: (_, error, stackTrace) =>
-                              _LibraryBookFallback(title: book.title),
-                        ),
-                      )
-                    : _LibraryBookFallback(title: book.title),
-              ),
-            ),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  book.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: AppColors.darkBlue,
-                    fontSize: 15,
-                    fontWeight: FontWeight.w800,
-                    height: 1.25,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: ClipRRect(
+                  borderRadius: const BorderRadius.vertical(
+                    top: Radius.circular(28),
+                  ),
+                  child: Container(
+                    width: double.infinity,
+                    color: AppColors.cream,
+                    child:
+                        book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(10),
+                            child: Image.network(
+                              book.coverImageUrl!,
+                              fit: BoxFit.contain,
+                              alignment: Alignment.center,
+                              errorBuilder: (_, error, stackTrace) =>
+                                  _LibraryBookFallback(title: book.title),
+                            ),
+                          )
+                        : _LibraryBookFallback(title: book.title),
                   ),
                 ),
-                const SizedBox(height: 6),
-                Text(
-                  book.author,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    color: AppColors.darkBrown.withValues(alpha: 0.82),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                Row(
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(14, 12, 14, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _StatusChip(label: _statusLabel(book.status)),
-                    const Spacer(),
-                    _RatingStars(rating: book.rating ?? 0),
+                    Text(
+                      book.title,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: AppColors.darkBlue,
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        height: 1.25,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      book.author,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: AppColors.darkBrown.withValues(alpha: 0.82),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        _StatusChip(label: _statusLabel(book.status)),
+                        const Spacer(),
+                        _RatingStars(rating: book.rating ?? 0),
+                      ],
+                    ),
                   ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }

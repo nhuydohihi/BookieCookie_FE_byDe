@@ -5,8 +5,10 @@ import '../core/constants/app_colors.dart';
 import '../data/models/home_dashboard_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/home_viewmodel.dart';
+import 'book_detail_page.dart';
 import 'library_page.dart';
 import 'manual_add_book_page.dart';
+import 'reading_page.dart';
 import 'widgets/add_book_menu_button.dart';
 import 'widgets/app_bottom_bar.dart';
 
@@ -92,6 +94,38 @@ class _HomePageView extends StatelessWidget {
     }
   }
 
+  Future<void> _openBookDetail(BuildContext context, int userBookId) async {
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => BookDetailPage(
+          user: user,
+          userBookId: userBookId,
+          token: token,
+        ),
+      ),
+    );
+
+    if (changed == true && context.mounted) {
+      await context.read<HomeViewModel>().loadDashboard();
+    }
+  }
+
+  void _openReading(BuildContext context, List<CurrentReadingBook> books) {
+    final currentBook = books.isNotEmpty ? books.first : null;
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ReadingPage(
+          title: currentBook?.title,
+          author: currentBook?.author,
+          coverImageUrl: currentBook?.coverImageUrl,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -124,6 +158,8 @@ class _HomePageView extends StatelessWidget {
                         _CurrentReadingSection(
                           books: homeVM.dashboard?.currentReading ?? const [],
                           isLoading: homeVM.isLoading,
+                          onBookTap: (userBookId) =>
+                              _openBookDetail(context, userBookId),
                         ),
                         const SizedBox(height: 28),
                         _SectionTitle(title: 'Streaks'),
@@ -131,6 +167,10 @@ class _HomePageView extends StatelessWidget {
                         _StreakCard(
                           streakDays: homeVM.dashboard?.streakDays ?? 0,
                           activityCount: homeVM.dashboard?.activityCount ?? 0,
+                          onStartReading: () => _openReading(
+                            context,
+                            homeVM.dashboard?.currentReading ?? const [],
+                          ),
                         ),
                         const SizedBox(height: 28),
                         _SectionTitle(
@@ -141,6 +181,8 @@ class _HomePageView extends StatelessWidget {
                         _FinishedBooksSection(
                           books: homeVM.dashboard?.finishedInYear ?? const [],
                           isLoading: homeVM.isLoading,
+                          onBookTap: (userBookId) =>
+                              _openBookDetail(context, userBookId),
                         ),
                         if (homeVM.errorMessage != null) ...[
                           const SizedBox(height: 24),
@@ -245,10 +287,15 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _CurrentReadingSection extends StatelessWidget {
-  const _CurrentReadingSection({required this.books, required this.isLoading});
+  const _CurrentReadingSection({
+    required this.books,
+    required this.isLoading,
+    required this.onBookTap,
+  });
 
   final List<CurrentReadingBook> books;
   final bool isLoading;
+  final ValueChanged<int> onBookTap;
 
   @override
   Widget build(BuildContext context) {
@@ -275,7 +322,10 @@ class _CurrentReadingSection extends StatelessWidget {
             return const _EmptyBookCard();
           }
 
-          return _ReadingBookCard(book: book);
+          return _ReadingBookCard(
+            book: book,
+            onTap: () => onBookTap(book.id),
+          );
         },
         separatorBuilder: (_, _) => const SizedBox(width: 16),
         itemCount: displayBooks.length,
@@ -285,9 +335,13 @@ class _CurrentReadingSection extends StatelessWidget {
 }
 
 class _ReadingBookCard extends StatelessWidget {
-  const _ReadingBookCard({required this.book});
+  const _ReadingBookCard({
+    required this.book,
+    required this.onTap,
+  });
 
   final CurrentReadingBook book;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -297,29 +351,37 @@ class _ReadingBookCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Expanded(
-            child: Container(
-              decoration: BoxDecoration(
+            child: Material(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(24),
+              child: InkWell(
+                onTap: onTap,
                 borderRadius: BorderRadius.circular(24),
-                color: Colors.white,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.12),
-                    blurRadius: 18,
-                    offset: const Offset(0, 10),
+                child: Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                        blurRadius: 18,
+                        offset: const Offset(0, 10),
+                      ),
+                    ],
                   ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(24),
-                child:
-                    book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty
-                    ? Image.network(
-                        book.coverImageUrl!,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, error, stackTrace) =>
-                            _BookCoverFallback(title: book.title),
-                      )
-                    : _BookCoverFallback(title: book.title),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(24),
+                    child:
+                        book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty
+                        ? Image.network(
+                            book.coverImageUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, error, stackTrace) =>
+                                _BookCoverFallback(title: book.title),
+                          )
+                        : _BookCoverFallback(title: book.title),
+                  ),
+                ),
               ),
             ),
           ),
@@ -436,10 +498,15 @@ class _EmptyBookCard extends StatelessWidget {
 }
 
 class _StreakCard extends StatelessWidget {
-  const _StreakCard({required this.streakDays, required this.activityCount});
+  const _StreakCard({
+    required this.streakDays,
+    required this.activityCount,
+    required this.onStartReading,
+  });
 
   final int streakDays;
   final int activityCount;
+  final VoidCallback onStartReading;
 
   @override
   Widget build(BuildContext context) {
@@ -522,7 +589,7 @@ class _StreakCard extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () {},
+              onPressed: onStartReading,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -545,10 +612,15 @@ class _StreakCard extends StatelessWidget {
 }
 
 class _FinishedBooksSection extends StatelessWidget {
-  const _FinishedBooksSection({required this.books, required this.isLoading});
+  const _FinishedBooksSection({
+    required this.books,
+    required this.isLoading,
+    required this.onBookTap,
+  });
 
   final List<FinishedBook> books;
   final bool isLoading;
+  final ValueChanged<int> onBookTap;
 
   @override
   Widget build(BuildContext context) {
@@ -585,7 +657,10 @@ class _FinishedBooksSection extends StatelessWidget {
       height: 122,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        itemBuilder: (context, index) => _FinishedBookCard(book: books[index]),
+        itemBuilder: (context, index) => _FinishedBookCard(
+          book: books[index],
+          onTap: () => onBookTap(books[index].id),
+        ),
         separatorBuilder: (_, _) => const SizedBox(width: 14),
         itemCount: books.length,
       ),
@@ -594,35 +669,47 @@ class _FinishedBooksSection extends StatelessWidget {
 }
 
 class _FinishedBookCard extends StatelessWidget {
-  const _FinishedBookCard({required this.book});
+  const _FinishedBookCard({
+    required this.book,
+    required this.onTap,
+  });
 
   final FinishedBook book;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 88,
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(22),
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(22),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 14,
-            offset: const Offset(0, 8),
+        child: Container(
+          width: 88,
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(22),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 14,
+                offset: const Offset(0, 8),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(22),
-        child: book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty
-            ? Image.network(
-                book.coverImageUrl!,
-                fit: BoxFit.cover,
-                errorBuilder: (_, error, stackTrace) =>
-                    _BookCoverFallback(title: book.title),
-              )
-            : _BookCoverFallback(title: book.title),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty
+                ? Image.network(
+                    book.coverImageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, error, stackTrace) =>
+                        _BookCoverFallback(title: book.title),
+                  )
+                : _BookCoverFallback(title: book.title),
+          ),
+        ),
       ),
     );
   }

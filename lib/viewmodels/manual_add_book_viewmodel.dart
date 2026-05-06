@@ -71,6 +71,57 @@ class ManualAddBookViewModel extends ChangeNotifier {
     return false;
   }
 
+  Future<bool> updateBook({
+    required int userBookId,
+    required String title,
+    String? author,
+    String status = 'plan_to_read',
+    int? rating,
+    String? note,
+    int? readingYear,
+    String? startDate,
+    String? finishDate,
+    String? coverImagePath,
+  }) async {
+    isSubmitting = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      final result = await _apiService.postMultipart(
+        '/user-books/manual/$userBookId/update',
+        fields: {
+          'user_id': user.id.toString(),
+          'title': title,
+          'author': author ?? '',
+          'status': status,
+          'rating': rating?.toString() ?? '',
+          'reading_year': readingYear?.toString() ?? '',
+          'start_date': startDate ?? '',
+          'finish_date': finishDate ?? '',
+          'note': note ?? '',
+        },
+        fileField: 'cover',
+        filePath: coverImagePath,
+        headers: token == null ? null : {'Authorization': 'Bearer $token'},
+      );
+
+      if (result['success'] == true) {
+        isSubmitting = false;
+        notifyListeners();
+        return true;
+      }
+
+      errorMessage = result['message'] as String? ?? 'Could not update book';
+    } catch (error) {
+      errorMessage = error.toString().replaceFirst('Exception: ', '');
+    }
+
+    isSubmitting = false;
+    notifyListeners();
+    return false;
+  }
+
   Future<void> searchBooksOnline(String keyword) async {
     final trimmedKeyword = keyword.trim();
     if (trimmedKeyword.isEmpty) {

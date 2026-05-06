@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import 'dart:io';
 
 import '../core/constants/app_colors.dart';
+import '../data/models/book_detail_model.dart';
 import '../data/models/google_book_search_result.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/manual_add_book_viewmodel.dart';
@@ -16,25 +17,34 @@ class ManualAddBookPage extends StatelessWidget {
     required this.user,
     this.token,
     this.initialMode = AddBookMode.manual,
+    this.initialBook,
   });
 
   final UserModel user;
   final String? token;
   final AddBookMode initialMode;
+  final BookDetailModel? initialBook;
 
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
       create: (_) => ManualAddBookViewModel(user: user, token: token),
-      child: _ManualAddBookView(initialMode: initialMode),
+      child: _ManualAddBookView(
+        initialMode: initialMode,
+        initialBook: initialBook,
+      ),
     );
   }
 }
 
 class _ManualAddBookView extends StatefulWidget {
-  const _ManualAddBookView({required this.initialMode});
+  const _ManualAddBookView({
+    required this.initialMode,
+    required this.initialBook,
+  });
 
   final AddBookMode initialMode;
+  final BookDetailModel? initialBook;
 
   @override
   State<_ManualAddBookView> createState() => _ManualAddBookViewState();
@@ -67,7 +77,22 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
   @override
   void initState() {
     super.initState();
-    _selectedMode = widget.initialMode;
+    _selectedMode = widget.initialBook == null
+        ? widget.initialMode
+        : AddBookMode.manual;
+
+    final initialBook = widget.initialBook;
+    if (initialBook != null) {
+      _titleController.text = initialBook.title;
+      _authorController.text = initialBook.author;
+      _noteController.text = initialBook.note ?? '';
+      _readingYearController.text = initialBook.readingYear?.toString() ?? '';
+      _startDateController.text = initialBook.startDate ?? '';
+      _finishDateController.text = initialBook.finishDate ?? '';
+      _selectedStatus = initialBook.status;
+      _selectedRating = initialBook.rating;
+      _selectedOnlineCoverUrl = initialBook.coverImageUrl;
+    }
   }
 
   @override
@@ -147,27 +172,47 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
       return;
     }
 
-    final success = await viewModel.createBook(
-      title: _titleController.text.trim(),
-      author: _authorController.text.trim().isEmpty
-          ? null
-          : _authorController.text.trim(),
-      status: _selectedStatus,
-      rating: _selectedRating,
-      note: _noteController.text.trim().isEmpty
-          ? null
-          : _noteController.text.trim(),
-      readingYear: _readingYearController.text.trim().isEmpty
-          ? null
-          : int.tryParse(_readingYearController.text.trim()),
-      startDate: _startDateController.text.trim().isEmpty
-          ? null
-          : _startDateController.text.trim(),
-      finishDate: _finishDateController.text.trim().isEmpty
-          ? null
-          : _finishDateController.text.trim(),
-      coverImagePath: _selectedCoverImage?.path,
-    );
+    final title = _titleController.text.trim();
+    final author = _authorController.text.trim().isEmpty
+        ? null
+        : _authorController.text.trim();
+    final note = _noteController.text.trim().isEmpty
+        ? null
+        : _noteController.text.trim();
+    final readingYear = _readingYearController.text.trim().isEmpty
+        ? null
+        : int.tryParse(_readingYearController.text.trim());
+    final startDate = _startDateController.text.trim().isEmpty
+        ? null
+        : _startDateController.text.trim();
+    final finishDate = _finishDateController.text.trim().isEmpty
+        ? null
+        : _finishDateController.text.trim();
+
+    final success = widget.initialBook == null
+        ? await viewModel.createBook(
+            title: title,
+            author: author,
+            status: _selectedStatus,
+            rating: _selectedRating,
+            note: note,
+            readingYear: readingYear,
+            startDate: startDate,
+            finishDate: finishDate,
+            coverImagePath: _selectedCoverImage?.path,
+          )
+        : await viewModel.updateBook(
+            userBookId: widget.initialBook!.id,
+            title: title,
+            author: author,
+            status: _selectedStatus,
+            rating: _selectedRating,
+            note: note,
+            readingYear: readingYear,
+            startDate: startDate,
+            finishDate: finishDate,
+            coverImagePath: _selectedCoverImage?.path,
+          );
 
     if (!mounted) return;
 
@@ -180,6 +225,7 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
   Widget build(BuildContext context) {
     return Consumer<ManualAddBookViewModel>(
       builder: (context, viewModel, _) {
+        final isEditing = widget.initialBook != null;
         return Scaffold(
           backgroundColor: AppColors.cream,
           body: SafeArea(
@@ -195,7 +241,7 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                       ),
                       const Spacer(),
                       _TopIconButton(
-                        icon: Icons.add_rounded,
+                        icon: isEditing ? Icons.check_rounded : Icons.add_rounded,
                         onTap: viewModel.isSubmitting
                             ? null
                             : () => _submit(viewModel),
@@ -211,15 +257,16 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          _ModeSwitcher(
-                            selectedMode: _selectedMode,
-                            onChanged: (mode) {
-                              setState(() {
-                                _selectedMode = mode;
-                              });
-                            },
-                          ),
-                          if (_selectedMode == AddBookMode.searchOnline) ...[
+                          if (!isEditing)
+                            _ModeSwitcher(
+                              selectedMode: _selectedMode,
+                              onChanged: (mode) {
+                                setState(() {
+                                  _selectedMode = mode;
+                                });
+                              },
+                            ),
+                          if (!isEditing && _selectedMode == AddBookMode.searchOnline) ...[
                             const SizedBox(height: 22),
                             _OnlineSearchSection(
                               controller: _onlineSearchController,
@@ -409,8 +456,8 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                                         color: Colors.white,
                                       ),
                                     )
-                                  : const Text(
-                                      'Create Book',
+                                  : Text(
+                                      isEditing ? 'Save Changes' : 'Create Book',
                                       style: TextStyle(
                                         fontSize: 16,
                                         fontWeight: FontWeight.w800,
