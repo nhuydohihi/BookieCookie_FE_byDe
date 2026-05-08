@@ -230,7 +230,7 @@ class _ProfileHeroCard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _AvatarBadge(user: user),
             const SizedBox(width: 16),
@@ -260,21 +260,14 @@ class _ProfileHeroCard extends StatelessWidget {
             ),
           ],
         ),
-        const SizedBox(height: 16),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: AppColors.accent.withValues(alpha: 0.10),
-            borderRadius: BorderRadius.circular(18),
-          ),
-          child: Text(
-            bio,
-            style: const TextStyle(
-              color: AppColors.darkBlue,
-              height: 1.45,
-              fontWeight: FontWeight.w600,
-            ),
+        const SizedBox(height: 10),
+        Text(
+          bio,
+          style: TextStyle(
+            color: Colors.black.withValues(alpha: 0.72),
+            fontSize: 13,
+            height: 1.4,
+            fontWeight: FontWeight.w500,
           ),
         ),
       ],
