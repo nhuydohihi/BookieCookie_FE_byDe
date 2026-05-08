@@ -8,6 +8,7 @@ import '../viewmodels/library_viewmodel.dart';
 import 'book_detail_page.dart';
 import 'home_page.dart';
 import 'manual_add_book_page.dart';
+import 'statistic_page.dart';
 import 'widgets/app_bottom_bar.dart';
 
 class LibraryPage extends StatelessWidget {
@@ -91,6 +92,15 @@ class _LibraryPageViewState extends State<_LibraryPageView> {
         );
         break;
       case AppTab.library:
+        break;
+      case AppTab.statistic:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                StatisticPage(user: widget.user, token: widget.token),
+          ),
+        );
         break;
       default:
         ScaffoldMessenger.of(
@@ -323,10 +333,7 @@ class _LibrarySummary extends StatelessWidget {
 }
 
 class _LibraryBookCard extends StatelessWidget {
-  const _LibraryBookCard({
-    required this.book,
-    required this.onTap,
-  });
+  const _LibraryBookCard({required this.book, required this.onTap});
 
   final LibraryBookModel book;
   final VoidCallback onTap;
@@ -341,19 +348,16 @@ class _LibraryBookCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(28),
         child: Container(
           decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(28),
-        border: Border.all(
-          color: Colors.grey.shade300,
-          width: 0.7,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.10),
-            blurRadius: 22,
-            offset: const Offset(0, 12),
-          ),
-        ],
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: Colors.grey.shade300, width: 0.7),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withValues(alpha: 0.10),
+                blurRadius: 22,
+                offset: const Offset(0, 12),
+              ),
+            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -367,7 +371,8 @@ class _LibraryBookCard extends StatelessWidget {
                     width: double.infinity,
                     color: AppColors.cream,
                     child:
-                        book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty
+                        book.coverImageUrl != null &&
+                            book.coverImageUrl!.isNotEmpty
                         ? Padding(
                             padding: const EdgeInsets.all(10),
                             child: Image.network(

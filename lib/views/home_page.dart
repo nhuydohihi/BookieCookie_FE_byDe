@@ -9,6 +9,7 @@ import 'book_detail_page.dart';
 import 'library_page.dart';
 import 'manual_add_book_page.dart';
 import 'reading_page.dart';
+import 'statistic_page.dart';
 import 'widgets/add_book_menu_button.dart';
 import 'widgets/app_bottom_bar.dart';
 
@@ -69,7 +70,9 @@ class _HomePageView extends StatelessWidget {
         break;
       case AddBookAction.scanIsbn:
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tính năng quét ISBN đang được phát triển.')),
+          const SnackBar(
+            content: Text('Tính năng quét ISBN đang được phát triển.'),
+          ),
         );
         break;
     }
@@ -87,10 +90,18 @@ class _HomePageView extends StatelessWidget {
           ),
         );
         break;
-      default:
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${tab.label} is coming soon.')),
+      case AppTab.statistic:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => StatisticPage(user: user, token: token),
+          ),
         );
+        break;
+      default:
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('${tab.label} is coming soon.')));
     }
   }
 
@@ -98,11 +109,8 @@ class _HomePageView extends StatelessWidget {
     final changed = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
-        builder: (_) => BookDetailPage(
-          user: user,
-          userBookId: userBookId,
-          token: token,
-        ),
+        builder: (_) =>
+            BookDetailPage(user: user, userBookId: userBookId, token: token),
       ),
     );
 
@@ -212,10 +220,7 @@ class _HomePageView extends StatelessWidget {
 }
 
 class _HomeHeader extends StatelessWidget {
-  const _HomeHeader({
-    required this.userName,
-    required this.onAddBookSelected,
-  });
+  const _HomeHeader({required this.userName, required this.onAddBookSelected});
 
   final String userName;
   final ValueChanged<AddBookAction> onAddBookSelected;
@@ -322,10 +327,7 @@ class _CurrentReadingSection extends StatelessWidget {
             return const _EmptyBookCard();
           }
 
-          return _ReadingBookCard(
-            book: book,
-            onTap: () => onBookTap(book.id),
-          );
+          return _ReadingBookCard(book: book, onTap: () => onBookTap(book.id));
         },
         separatorBuilder: (_, _) => const SizedBox(width: 16),
         itemCount: displayBooks.length,
@@ -335,10 +337,7 @@ class _CurrentReadingSection extends StatelessWidget {
 }
 
 class _ReadingBookCard extends StatelessWidget {
-  const _ReadingBookCard({
-    required this.book,
-    required this.onTap,
-  });
+  const _ReadingBookCard({required this.book, required this.onTap});
 
   final CurrentReadingBook book;
   final VoidCallback onTap;
@@ -372,7 +371,8 @@ class _ReadingBookCard extends StatelessWidget {
                   child: ClipRRect(
                     borderRadius: BorderRadius.circular(24),
                     child:
-                        book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty
+                        book.coverImageUrl != null &&
+                            book.coverImageUrl!.isNotEmpty
                         ? Image.network(
                             book.coverImageUrl!,
                             fit: BoxFit.cover,
@@ -669,10 +669,7 @@ class _FinishedBooksSection extends StatelessWidget {
 }
 
 class _FinishedBookCard extends StatelessWidget {
-  const _FinishedBookCard({
-    required this.book,
-    required this.onTap,
-  });
+  const _FinishedBookCard({required this.book, required this.onTap});
 
   final FinishedBook book;
   final VoidCallback onTap;

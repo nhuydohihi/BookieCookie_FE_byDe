@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
@@ -30,75 +31,116 @@ class _ReadingPageState extends State<ReadingPage> {
   static const int _minMinutes = 5;
 
   late final TextEditingController _noteController;
+  FixedExtentScrollController? _timeController;
   late int _selectedMinutes;
+  late int _remainingSeconds;
   bool _isReading = false;
-  double? _lastDragAngle;
+  Timer? _countdownTimer;
 
-  int get _totalSteps => _maxMinutes ~/ _minuteStep;
+  int get _itemCount => (_maxMinutes - _minMinutes) ~/ _minuteStep + 1;
+  int get _selectedIndex => (_selectedMinutes - _minMinutes) ~/ _minuteStep;
 
   @override
   void initState() {
     super.initState();
-    _selectedMinutes = widget.initialMinutes.clamp(_minMinutes, _maxMinutes);
+    _selectedMinutes =
+        (widget.initialMinutes.clamp(_minMinutes, _maxMinutes) as num).toInt();
+    _remainingSeconds = _selectedMinutes * 60;
     _noteController = TextEditingController(text: widget.initialNote ?? '');
+    _ensureTimeController();
   }
 
   @override
   void dispose() {
+    _countdownTimer?.cancel();
     _noteController.dispose();
+    _timeController?.dispose();
     super.dispose();
   }
 
+  FixedExtentScrollController _ensureTimeController() {
+    return _timeController ??= FixedExtentScrollController(
+      initialItem: _selectedIndex,
+    );
+  }
+
   void _toggleReading() {
-    setState(() {
-      _isReading = !_isReading;
-    });
-  }
-
-  void _handlePanStart(DragStartDetails details, Size size) {
-    _lastDragAngle = _angleForOffset(details.localPosition, size);
-  }
-
-  void _handlePanUpdate(DragUpdateDetails details, Size size) {
-    final currentAngle = _angleForOffset(details.localPosition, size);
-    final previousAngle = _lastDragAngle;
-    if (previousAngle == null) {
-      _lastDragAngle = currentAngle;
+    if (_isReading) {
+      _countdownTimer?.cancel();
+      setState(() {
+        _isReading = false;
+      });
       return;
     }
 
-    var delta = currentAngle - previousAngle;
-    if (delta > math.pi) {
-      delta -= math.pi * 2;
-    } else if (delta < -math.pi) {
-      delta += math.pi * 2;
+    final totalSeconds = _selectedMinutes * 60;
+    if (_remainingSeconds <= 0 || _remainingSeconds > totalSeconds) {
+      _remainingSeconds = totalSeconds;
     }
 
-    final currentSteps = (_selectedMinutes / _minuteStep).round();
-    final nextSteps = (currentSteps + (delta / _anglePerStep).round()).clamp(
-      _minMinutes ~/ _minuteStep,
-      _totalSteps,
-    );
+    setState(() {
+      _isReading = true;
+    });
 
-    if (nextSteps != currentSteps) {
+    _countdownTimer?.cancel();
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+
+      if (_remainingSeconds <= 1) {
+        timer.cancel();
+        setState(() {
+          _remainingSeconds = 0;
+          _isReading = false;
+        });
+        return;
+      }
+
       setState(() {
-        _selectedMinutes = nextSteps * _minuteStep;
+        _remainingSeconds -= 1;
       });
+    });
+  }
+
+  void _handleTimeChanged(int index) {
+    if (_isReading) {
+      return;
     }
 
-    _lastDragAngle = currentAngle;
+    final nextMinutes = _minMinutes + (index * _minuteStep);
+    if (nextMinutes == _selectedMinutes) {
+      return;
+    }
+
+    setState(() {
+      _selectedMinutes = nextMinutes;
+      _remainingSeconds = nextMinutes * 60;
+    });
   }
 
-  void _handlePanEnd(DragEndDetails details) {
-    _lastDragAngle = null;
+  double get _progressValue {
+    if (!_isReading) {
+      return 1.0;
+    }
+
+    final totalSeconds = _selectedMinutes * 60;
+    if (totalSeconds <= 0) {
+      return 0.0;
+    }
+
+    return ((_remainingSeconds / totalSeconds).clamp(0.0, 1.0) as num)
+        .toDouble();
   }
 
-  double get _anglePerStep => (math.pi * 2) / _totalSteps;
-
-  double _angleForOffset(Offset offset, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
-    final vector = offset - center;
-    return math.atan2(vector.dy, vector.dx) + math.pi / 2;
+  String get _centerLabel {
+    final totalSeconds = _isReading ? _remainingSeconds : _selectedMinutes * 60;
+    final safeSeconds = (totalSeconds.clamp(0, _maxMinutes * 60) as num)
+        .toInt();
+    final minutes = (safeSeconds ~/ 60).toString().padLeft(2, '0');
+    final seconds = (safeSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 
   @override
@@ -114,6 +156,7 @@ class _ReadingPageState extends State<ReadingPage> {
       backgroundColor: AppColors.cream,
       body: SafeArea(
         child: SingleChildScrollView(
+          physics: const BouncingScrollPhysics(),
           padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -146,11 +189,15 @@ class _ReadingPageState extends State<ReadingPage> {
               const SizedBox(height: 28),
               Center(
                 child: _ReadingDial(
-                  minutes: _selectedMinutes,
-                  maxMinutes: _maxMinutes,
-                  onPanStart: _handlePanStart,
-                  onPanUpdate: _handlePanUpdate,
-                  onPanEnd: _handlePanEnd,
+                  centerLabel: _centerLabel,
+                  progressValue: _progressValue,
+                  selectedMinutes: _selectedMinutes,
+                  controller: _ensureTimeController(),
+                  itemCount: _itemCount,
+                  minuteStep: _minuteStep,
+                  minMinutes: _minMinutes,
+                  isReading: _isReading,
+                  onSelectedItemChanged: _handleTimeChanged,
                 ),
               ),
               const SizedBox(height: 24),
@@ -168,7 +215,7 @@ class _ReadingPageState extends State<ReadingPage> {
                     elevation: 0,
                   ),
                   child: Text(
-                    _isReading ? 'Reading in progress' : 'Start reading',
+                    _isReading ? 'Pause reading' : 'Start reading',
                     style: const TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -188,7 +235,9 @@ class _ReadingPageState extends State<ReadingPage> {
                   children: [
                     Expanded(
                       child: Text(
-                        '$_selectedMinutes phút',
+                        _isReading
+                            ? 'Còn lại $_centerLabel'
+                            : '$_selectedMinutes phút',
                         style: const TextStyle(
                           color: AppColors.darkBlue,
                           fontSize: 24,
@@ -196,23 +245,24 @@ class _ReadingPageState extends State<ReadingPage> {
                         ),
                       ),
                     ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 10,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.primary.withValues(alpha: 0.12),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: const Text(
-                        'Mỗi nấc +5 phút',
-                        style: TextStyle(
-                          color: AppColors.primary,
-                          fontWeight: FontWeight.w700,
+                    if (_isReading)
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 14,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: AppColors.primary.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Text(
+                          'Đang đọc',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
                       ),
-                    ),
                   ],
                 ),
               ),
@@ -320,144 +370,160 @@ class _ReadingBookHeader extends StatelessWidget {
 
 class _ReadingDial extends StatelessWidget {
   const _ReadingDial({
-    required this.minutes,
-    required this.maxMinutes,
-    required this.onPanStart,
-    required this.onPanUpdate,
-    required this.onPanEnd,
+    required this.centerLabel,
+    required this.progressValue,
+    required this.selectedMinutes,
+    required this.controller,
+    required this.itemCount,
+    required this.minuteStep,
+    required this.minMinutes,
+    required this.isReading,
+    required this.onSelectedItemChanged,
   });
 
-  final int minutes;
-  final int maxMinutes;
-  final void Function(DragStartDetails details, Size size) onPanStart;
-  final void Function(DragUpdateDetails details, Size size) onPanUpdate;
-  final void Function(DragEndDetails details) onPanEnd;
+  final String centerLabel;
+  final double progressValue;
+  final int selectedMinutes;
+  final FixedExtentScrollController controller;
+  final int itemCount;
+  final int minuteStep;
+  final int minMinutes;
+  final bool isReading;
+  final ValueChanged<int> onSelectedItemChanged;
 
   @override
   Widget build(BuildContext context) {
-    const size = 230.0;
+    const size = 260.0;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final dialSize = Size.square(size);
-
-        return GestureDetector(
-          onPanStart: (details) => onPanStart(details, dialSize),
-          onPanUpdate: (details) => onPanUpdate(details, dialSize),
-          onPanEnd: onPanEnd,
-          child: SizedBox(
-            width: size,
-            height: size,
-            child: CustomPaint(
-              painter: _DialPainter(
-                minutes: minutes,
-                maxMinutes: maxMinutes,
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      '$minutes',
-                      style: const TextStyle(
-                        color: AppColors.darkBlue,
-                        fontSize: 52,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                    Text(
-                      'phút',
-                      style: TextStyle(
-                        color: AppColors.darkBrown.withValues(alpha: 0.72),
-                        fontSize: 16,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          CustomPaint(
+            size: const Size.square(size),
+            painter: _DialPainter(progressValue: progressValue),
+          ),
+          Container(
+            width: 176,
+            height: 176,
+            decoration: BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.primary.withValues(alpha: 0.08),
+                  blurRadius: 18,
+                  offset: const Offset(0, 10),
                 ),
-              ),
+              ],
+            ),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                SizedBox(
+                  height: 104,
+                  child: ListWheelScrollView.useDelegate(
+                    controller: controller,
+                    itemExtent: 42,
+                    diameterRatio: 1.28,
+                    perspective: 0.003,
+                    physics: isReading
+                        ? const NeverScrollableScrollPhysics()
+                        : const FixedExtentScrollPhysics(),
+                    onSelectedItemChanged: onSelectedItemChanged,
+                    childDelegate: ListWheelChildBuilderDelegate(
+                      childCount: itemCount,
+                      builder: (context, index) {
+                        final value = minMinutes + (index * minuteStep);
+                        final isSelected = value == selectedMinutes;
+
+                        return Center(
+                          child: Text(
+                            '${value.toString().padLeft(2, '0')}m',
+                            style: TextStyle(
+                              color: isSelected
+                                  ? Colors.transparent
+                                  : AppColors.darkBrown.withValues(alpha: 0.10),
+                              fontSize: isSelected ? 38 : 24,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ),
+                IgnorePointer(
+                  child: Container(
+                    width: 138,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(999),
+                      color: AppColors.primary.withValues(alpha: 0.08),
+                      border: Border.all(
+                        color: AppColors.primary.withValues(alpha: 0.16),
+                      ),
+                    ),
+                  ),
+                ),
+                IgnorePointer(
+                  child: Text(
+                    centerLabel,
+                    style: const TextStyle(
+                      color: AppColors.darkBlue,
+                      fontSize: 38,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        );
-      },
+        ],
+      ),
     );
   }
 }
 
 class _DialPainter extends CustomPainter {
-  const _DialPainter({
-    required this.minutes,
-    required this.maxMinutes,
-  });
+  const _DialPainter({required this.progressValue});
 
-  final int minutes;
-  final int maxMinutes;
+  final double progressValue;
 
   @override
   void paint(Canvas canvas, Size size) {
-    final center = Offset(size.width / 2, size.height / 2);
     final radius = size.width / 2 - 18;
-    final rect = Rect.fromCircle(center: center, radius: radius);
+    final rect = Rect.fromCircle(
+      center: Offset(size.width / 2, size.height / 2),
+      radius: radius,
+    );
     const startAngle = -math.pi / 2;
-    final sweepAngle = (minutes / maxMinutes) * math.pi * 2;
+    final sweepAngle = progressValue * math.pi * 2;
 
     final trackPaint = Paint()
       ..color = AppColors.primary.withValues(alpha: 0.14)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 16
-      ..strokeCap = StrokeCap.round;
+      ..strokeWidth = 18;
 
     final progressPaint = Paint()
-      ..shader = const LinearGradient(
-        colors: [AppColors.secondary, AppColors.primary],
-        begin: Alignment.topLeft,
-        end: Alignment.bottomRight,
-      ).createShader(rect)
+      ..color = AppColors.primary
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 16
+      ..strokeWidth = 18
       ..strokeCap = StrokeCap.round;
-
-    final fillPaint = Paint()
-      ..color = Colors.white;
-
-    final shadowPaint = Paint()
-      ..color = AppColors.primary.withValues(alpha: 0.08)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
-
-    canvas.drawCircle(center, radius - 6, shadowPaint);
-    canvas.drawCircle(center, radius - 14, fillPaint);
     canvas.drawArc(rect, 0, math.pi * 2, false, trackPaint);
     canvas.drawArc(rect, startAngle, sweepAngle, false, progressPaint);
-
-    final handleAngle = startAngle + sweepAngle;
-    final handleCenter = Offset(
-      center.dx + math.cos(handleAngle) * radius,
-      center.dy + math.sin(handleAngle) * radius,
-    );
-
-    canvas.drawCircle(
-      handleCenter,
-      13,
-      Paint()..color = Colors.white,
-    );
-    canvas.drawCircle(
-      handleCenter,
-      8,
-      Paint()..color = AppColors.primary,
-    );
   }
 
   @override
   bool shouldRepaint(covariant _DialPainter oldDelegate) {
-    return oldDelegate.minutes != minutes || oldDelegate.maxMinutes != maxMinutes;
+    return oldDelegate.progressValue != progressValue;
   }
 }
 
 class _InfoCard extends StatelessWidget {
-  const _InfoCard({
-    required this.title,
-    required this.child,
-  });
+  const _InfoCard({required this.title, required this.child});
 
   final String title;
   final Widget child;
@@ -498,10 +564,7 @@ class _InfoCard extends StatelessWidget {
 }
 
 class _TopActionButton extends StatelessWidget {
-  const _TopActionButton({
-    required this.icon,
-    required this.onTap,
-  });
+  const _TopActionButton({required this.icon, required this.onTap});
 
   final IconData icon;
   final VoidCallback onTap;
