@@ -5,6 +5,7 @@ import '../core/constants/app_colors.dart';
 import '../data/models/library_book_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/library_viewmodel.dart';
+import 'account_page.dart';
 import 'book_detail_page.dart';
 import 'home_page.dart';
 import 'manual_add_book_page.dart';
@@ -99,6 +100,14 @@ class _LibraryPageViewState extends State<_LibraryPageView> {
           MaterialPageRoute(
             builder: (_) =>
                 StatisticPage(user: widget.user, token: widget.token),
+          ),
+        );
+        break;
+      case AppTab.account:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AccountPage(user: widget.user, token: widget.token),
           ),
         );
         break;

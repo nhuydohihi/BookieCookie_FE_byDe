@@ -5,6 +5,7 @@ import '../core/constants/app_colors.dart';
 import '../data/models/home_dashboard_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/home_viewmodel.dart';
+import 'account_page.dart';
 import 'book_detail_page.dart';
 import 'library_page.dart';
 import 'manual_add_book_page.dart';
@@ -95,6 +96,14 @@ class _HomePageView extends StatelessWidget {
           context,
           MaterialPageRoute(
             builder: (_) => StatisticPage(user: user, token: token),
+          ),
+        );
+        break;
+      case AppTab.account:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AccountPage(user: user, token: token),
           ),
         );
         break;

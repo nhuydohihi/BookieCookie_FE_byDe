@@ -7,6 +7,7 @@ import '../core/constants/app_colors.dart';
 import '../data/models/home_dashboard_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/home_viewmodel.dart';
+import 'account_page.dart';
 import 'home_page.dart';
 import 'library_page.dart';
 import 'widgets/app_bottom_bar.dart';
@@ -64,6 +65,14 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
         );
         break;
       case AppTab.statistic:
+        break;
+      case AppTab.account:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AccountPage(user: widget.user, token: widget.token),
+          ),
+        );
         break;
       default:
         ScaffoldMessenger.of(

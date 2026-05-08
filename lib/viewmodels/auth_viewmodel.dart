@@ -88,4 +88,12 @@ class AuthViewModel extends ChangeNotifier {
       notifyListeners();
     }
   }
+
+  void logout() {
+    isLoading = false;
+    errorMessage = null;
+    token = null;
+    currentUser = null;
+    notifyListeners();
+  }
 }
