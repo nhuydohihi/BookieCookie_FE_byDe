@@ -207,27 +207,13 @@ class _AccountHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Account',
-          style: TextStyle(
-            color: AppColors.darkBlue,
-            fontSize: 28,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        SizedBox(height: 6),
-        Text(
-          'Quản lý thông tin cá nhân và góc đọc sách của bạn.',
-          style: TextStyle(
-            color: AppColors.darkBrown,
-            fontSize: 13,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-      ],
+    return const Text(
+      'Account',
+      style: TextStyle(
+        color: AppColors.darkBlue,
+        fontSize: 28,
+        fontWeight: FontWeight.w800,
+      ),
     );
   }
 }
@@ -240,66 +226,58 @@ class _ProfileHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(32),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Colors.white, AppColors.surfaceSoft],
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            _AvatarBadge(user: user),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    user.name,
+                    style: const TextStyle(
+                      color: AppColors.darkBlue,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    user.email,
+                    style: TextStyle(
+                      color: AppColors.darkBrown.withValues(alpha: 0.78),
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.14),
-            blurRadius: 28,
-            offset: const Offset(0, 14),
+        const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          decoration: BoxDecoration(
+            color: AppColors.accent.withValues(alpha: 0.10),
+            borderRadius: BorderRadius.circular(18),
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          _AvatarBadge(user: user),
-          const SizedBox(height: 18),
-          Text(
-            user.name,
-            textAlign: TextAlign.center,
+          child: Text(
+            bio,
             style: const TextStyle(
               color: AppColors.darkBlue,
-              fontSize: 26,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            user.email,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: AppColors.darkBrown.withValues(alpha: 0.78),
-              fontSize: 14,
+              height: 1.45,
               fontWeight: FontWeight.w600,
             ),
           ),
-          const SizedBox(height: 14),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.accent.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Text(
-              bio,
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: AppColors.darkBlue,
-                height: 1.45,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -313,33 +291,17 @@ class _AvatarBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     final initials = _buildInitials(user.name);
 
-    return Container(
-      width: 110,
-      height: 110,
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: const LinearGradient(
-          colors: [AppColors.primary, AppColors.accent],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.accent.withValues(alpha: 0.18),
-            blurRadius: 24,
-            offset: const Offset(0, 12),
-          ),
-        ],
-      ),
+    return SizedBox(
+      width: 92,
+      height: 92,
       child: CircleAvatar(
-        backgroundColor: Colors.white,
+        backgroundColor: AppColors.surfaceSoft,
         child: user.avatarUrl != null && user.avatarUrl!.trim().isNotEmpty
             ? ClipOval(
                 child: Image.network(
                   user.avatarUrl!,
-                  width: 100,
-                  height: 100,
+                  width: 92,
+                  height: 92,
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) =>
                       _AvatarFallback(initials: initials),
@@ -359,8 +321,8 @@ class _AvatarFallback extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      width: 100,
-      height: 100,
+      width: 92,
+      height: 92,
       decoration: const BoxDecoration(
         shape: BoxShape.circle,
         color: AppColors.surfaceSoft,
