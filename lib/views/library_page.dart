@@ -7,6 +7,7 @@ import '../data/models/user_model.dart';
 import '../viewmodels/library_viewmodel.dart';
 import 'account_page.dart';
 import 'book_detail_page.dart';
+import 'challenge_page.dart';
 import 'home_page.dart';
 import 'manual_add_book_page.dart';
 import 'statistic_page.dart';
@@ -94,6 +95,15 @@ class _LibraryPageViewState extends State<_LibraryPageView> {
         break;
       case AppTab.library:
         break;
+      case AppTab.challenge:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                ChallengePage(user: widget.user, token: widget.token),
+          ),
+        );
+        break;
       case AppTab.statistic:
         Navigator.pushReplacement(
           context,
@@ -111,10 +121,6 @@ class _LibraryPageViewState extends State<_LibraryPageView> {
           ),
         );
         break;
-      default:
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${tab.label} is coming soon.')));
     }
   }
 

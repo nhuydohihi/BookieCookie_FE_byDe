@@ -7,6 +7,7 @@ import '../data/models/user_model.dart';
 import '../viewmodels/home_viewmodel.dart';
 import 'account_page.dart';
 import 'book_detail_page.dart';
+import 'challenge_page.dart';
 import 'library_page.dart';
 import 'manual_add_book_page.dart';
 import 'reading_page.dart';
@@ -91,6 +92,14 @@ class _HomePageView extends StatelessWidget {
           ),
         );
         break;
+      case AppTab.challenge:
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChallengePage(user: user, token: token),
+          ),
+        );
+        break;
       case AppTab.statistic:
         Navigator.pushReplacement(
           context,
@@ -107,10 +116,6 @@ class _HomePageView extends StatelessWidget {
           ),
         );
         break;
-      default:
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('${tab.label} is coming soon.')));
     }
   }
 

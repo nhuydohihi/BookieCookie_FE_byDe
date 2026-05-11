@@ -5,6 +5,7 @@ import '../core/constants/app_colors.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/account_viewmodel.dart';
 import '../viewmodels/auth_viewmodel.dart';
+import 'challenge_page.dart';
 import 'edit_profile_page.dart';
 import 'home_page.dart';
 import 'library_page.dart';
@@ -51,8 +52,11 @@ class AccountPage extends StatelessWidget {
       case AppTab.account:
         break;
       case AppTab.challenge:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Challenge is coming soon.')),
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChallengePage(user: activeUser, token: token),
+          ),
         );
         break;
     }
