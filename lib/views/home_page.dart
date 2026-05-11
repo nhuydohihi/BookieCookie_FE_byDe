@@ -143,6 +143,9 @@ class _HomePageView extends StatelessWidget {
           title: currentBook?.title,
           author: currentBook?.author,
           coverImageUrl: currentBook?.coverImageUrl,
+          userId: user.id,
+          userBookId: currentBook?.id,
+          token: token,
         ),
       ),
     );

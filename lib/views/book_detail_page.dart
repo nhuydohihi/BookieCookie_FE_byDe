@@ -82,6 +82,9 @@ class _BookDetailViewState extends State<_BookDetailView> {
             author: detail?.author,
             coverImageUrl: detail?.coverImageUrl,
             initialNote: detail?.note,
+            userId: widget.user.id,
+            userBookId: detail?.id ?? viewModel.userBookId,
+            token: widget.token,
           ),
         ),
       );

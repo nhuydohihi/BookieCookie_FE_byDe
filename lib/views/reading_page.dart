@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../core/constants/app_colors.dart';
+import '../core/services/api_service.dart';
 
 class ReadingPage extends StatefulWidget {
   const ReadingPage({
@@ -13,6 +14,9 @@ class ReadingPage extends StatefulWidget {
     this.coverImageUrl,
     this.initialNote,
     this.initialMinutes = 25,
+    this.userId,
+    this.userBookId,
+    this.token,
   });
 
   final String? title;
@@ -20,6 +24,9 @@ class ReadingPage extends StatefulWidget {
   final String? coverImageUrl;
   final String? initialNote;
   final int initialMinutes;
+  final int? userId;
+  final int? userBookId;
+  final String? token;
 
   @override
   State<ReadingPage> createState() => _ReadingPageState();
@@ -35,7 +42,10 @@ class _ReadingPageState extends State<ReadingPage> {
   late int _selectedMinutes;
   late int _remainingSeconds;
   bool _isReading = false;
+  bool _isSavingSession = false;
   Timer? _countdownTimer;
+  final ApiService _apiService = ApiService();
+  int _syncedElapsedSeconds = 0;
 
   int get _itemCount => (_maxMinutes - _minMinutes) ~/ _minuteStep + 1;
   int get _selectedIndex => (_selectedMinutes - _minMinutes) ~/ _minuteStep;
@@ -64,18 +74,20 @@ class _ReadingPageState extends State<ReadingPage> {
     );
   }
 
-  void _toggleReading() {
+  Future<void> _toggleReading() async {
     if (_isReading) {
       _countdownTimer?.cancel();
       setState(() {
         _isReading = false;
       });
+      await _syncCurrentProgress(finalize: false);
       return;
     }
 
     final totalSeconds = _selectedMinutes * 60;
     if (_remainingSeconds <= 0 || _remainingSeconds > totalSeconds) {
       _remainingSeconds = totalSeconds;
+      _syncedElapsedSeconds = 0;
     }
 
     setState(() {
@@ -95,6 +107,7 @@ class _ReadingPageState extends State<ReadingPage> {
           _remainingSeconds = 0;
           _isReading = false;
         });
+        unawaited(_syncCurrentProgress(finalize: true));
         return;
       }
 
@@ -117,7 +130,107 @@ class _ReadingPageState extends State<ReadingPage> {
     setState(() {
       _selectedMinutes = nextMinutes;
       _remainingSeconds = nextMinutes * 60;
+      _syncedElapsedSeconds = 0;
     });
+  }
+
+  int get _elapsedSeconds {
+    final totalSeconds = _selectedMinutes * 60;
+    return (totalSeconds - _remainingSeconds).clamp(0, totalSeconds);
+  }
+
+  Future<void> _syncCurrentProgress({required bool finalize}) async {
+    if (_isSavingSession) {
+      return;
+    }
+
+    final userId = widget.userId;
+    final userBookId = widget.userBookId;
+
+    if (userId == null || userBookId == null) {
+      return;
+    }
+
+    final unsavedSeconds = _elapsedSeconds - _syncedElapsedSeconds;
+    if (unsavedSeconds <= 0) {
+      return;
+    }
+
+    final durationMinutes = finalize
+        ? (unsavedSeconds / 60).ceil()
+        : (unsavedSeconds ~/ 60);
+
+    if (durationMinutes <= 0) {
+      return;
+    }
+
+    if (mounted) {
+      setState(() {
+        _isSavingSession = true;
+      });
+    } else {
+      _isSavingSession = true;
+    }
+
+    try {
+      await _apiService.post(
+        '/user-books/$userBookId/reading-sessions',
+        {
+          'user_id': userId,
+          'duration_minutes': durationMinutes,
+          'pages_read': 0,
+        },
+        headers: widget.token == null
+            ? null
+            : {'Authorization': 'Bearer ${widget.token}'},
+      );
+
+      if (finalize) {
+        _syncedElapsedSeconds = _elapsedSeconds;
+      } else {
+        _syncedElapsedSeconds += durationMinutes * 60;
+      }
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Không lưu được phiên đọc lên server.'),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSavingSession = false;
+        });
+      } else {
+        _isSavingSession = false;
+      }
+    }
+  }
+
+  Future<void> _handleExit() async {
+    if (_isSavingSession) {
+      return;
+    }
+
+    _countdownTimer?.cancel();
+
+    if (_isReading) {
+      setState(() {
+        _isReading = false;
+      });
+    }
+
+    await _syncCurrentProgress(finalize: true);
+
+    if (!mounted) {
+      return;
+    }
+
+    Navigator.pop(context);
   }
 
   double get _progressValue {
@@ -152,138 +265,146 @@ class _ReadingPageState extends State<ReadingPage> {
         ? widget.author!.trim()
         : 'Focus session';
 
-    return Scaffold(
-      backgroundColor: AppColors.cream,
-      body: SafeArea(
-        child: SingleChildScrollView(
-          physics: const BouncingScrollPhysics(),
-          padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  _TopActionButton(
-                    icon: Icons.arrow_back_ios_new_rounded,
-                    onTap: () => Navigator.pop(context),
-                  ),
-                  const Spacer(),
-                  Text(
-                    'Reading',
-                    style: TextStyle(
-                      color: AppColors.darkBlue.withValues(alpha: 0.92),
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  const Spacer(),
-                  const SizedBox(width: 50),
-                ],
-              ),
-              const SizedBox(height: 24),
-              _ReadingBookHeader(
-                title: displayTitle,
-                author: displayAuthor,
-                coverImageUrl: widget.coverImageUrl,
-              ),
-              const SizedBox(height: 28),
-              Center(
-                child: _ReadingDial(
-                  centerLabel: _centerLabel,
-                  progressValue: _progressValue,
-                  selectedMinutes: _selectedMinutes,
-                  controller: _ensureTimeController(),
-                  itemCount: _itemCount,
-                  minuteStep: _minuteStep,
-                  minMinutes: _minMinutes,
-                  isReading: _isReading,
-                  onSelectedItemChanged: _handleTimeChanged,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _toggleReading,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 17),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    elevation: 0,
-                  ),
-                  child: Text(
-                    _isReading ? 'Pause reading' : 'Start reading',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              Container(
-                height: 1,
-                color: AppColors.primary.withValues(alpha: 0.16),
-              ),
-              const SizedBox(height: 24),
-              _InfoCard(
-                title: 'Thời gian đọc hôm nay',
-                child: Row(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (!didPop) {
+          unawaited(_handleExit());
+        }
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.cream,
+        body: SafeArea(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 28),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Expanded(
-                      child: Text(
-                        _isReading
-                            ? 'Còn lại $_centerLabel'
-                            : '$_selectedMinutes phút',
-                        style: const TextStyle(
-                          color: AppColors.darkBlue,
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                        ),
+                    _TopActionButton(
+                      icon: Icons.arrow_back_ios_new_rounded,
+                      onTap: () => _handleExit(),
+                    ),
+                    const Spacer(),
+                    Text(
+                      'Reading',
+                      style: TextStyle(
+                        color: AppColors.darkBlue.withValues(alpha: 0.92),
+                        fontSize: 18,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
-                    if (_isReading)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 14,
-                          vertical: 10,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.primary.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: const Text(
-                          'Đang đọc',
-                          style: TextStyle(
-                            color: AppColors.primary,
-                            fontWeight: FontWeight.w700,
+                    const Spacer(),
+                    const SizedBox(width: 50),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                _ReadingBookHeader(
+                  title: displayTitle,
+                  author: displayAuthor,
+                  coverImageUrl: widget.coverImageUrl,
+                ),
+                const SizedBox(height: 28),
+                Center(
+                  child: _ReadingDial(
+                    centerLabel: _centerLabel,
+                    progressValue: _progressValue,
+                    selectedMinutes: _selectedMinutes,
+                    controller: _ensureTimeController(),
+                    itemCount: _itemCount,
+                    minuteStep: _minuteStep,
+                    minMinutes: _minMinutes,
+                    isReading: _isReading,
+                    onSelectedItemChanged: _handleTimeChanged,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    onPressed: _isSavingSession ? null : () => _toggleReading(),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 17),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: Text(
+                      _isReading ? 'Pause reading' : 'Start reading',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Container(
+                  height: 1,
+                  color: AppColors.primary.withValues(alpha: 0.16),
+                ),
+                const SizedBox(height: 24),
+                _InfoCard(
+                  title: 'Thời gian đọc hôm nay',
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          _isReading
+                              ? 'Còn lại $_centerLabel'
+                              : '$_selectedMinutes phút',
+                          style: const TextStyle(
+                            color: AppColors.darkBlue,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w800,
                           ),
                         ),
                       ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              _InfoCard(
-                title: 'Ghi chú',
-                child: TextField(
-                  controller: _noteController,
-                  maxLines: 6,
-                  decoration: const InputDecoration(
-                    hintText: 'Viết ghi chú cho phiên đọc này...',
-                    border: InputBorder.none,
+                      if (_isReading)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.primary.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: const Text(
+                            'Đang đọc',
+                            style: TextStyle(
+                              color: AppColors.primary,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                  style: TextStyle(
-                    color: AppColors.darkBrown.withValues(alpha: 0.9),
-                    fontWeight: FontWeight.w600,
-                    height: 1.5,
+                ),
+                const SizedBox(height: 18),
+                _InfoCard(
+                  title: 'Ghi chú',
+                  child: TextField(
+                    controller: _noteController,
+                    maxLines: 6,
+                    decoration: const InputDecoration(
+                      hintText: 'Viết ghi chú cho phiên đọc này...',
+                      border: InputBorder.none,
+                    ),
+                    style: TextStyle(
+                      color: AppColors.darkBrown.withValues(alpha: 0.9),
+                      fontWeight: FontWeight.w600,
+                      height: 1.5,
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),

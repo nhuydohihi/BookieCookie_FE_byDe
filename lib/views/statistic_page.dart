@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants/app_colors.dart';
+import '../data/models/achievement_model.dart';
 import '../data/models/home_dashboard_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/home_viewmodel.dart';
@@ -99,6 +100,7 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
             final selectedStat = weekStats[_selectedDayIndex];
             final minuteGoal = _buildTodayGoal(dashboard);
             final yearlyGoal = _buildYearlyGoal(dashboard);
+            final overview = _buildChallengeOverview(dashboard);
             return RefreshIndicator(
               color: AppColors.primary,
               onRefresh: homeVM.loadDashboard,
@@ -127,6 +129,8 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
                             });
                           },
                         ),
+                        const SizedBox(height: 28),
+                        _YearReadingCard(overview: overview),
                         const SizedBox(height: 28),
                         _YearlyOverviewCard(
                           year: dashboard?.year ?? DateTime.now().year,
@@ -171,6 +175,165 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
       bottomNavigationBar: AppBottomBar(
         currentTab: AppTab.statistic,
         onTabSelected: (tab) => _handleTabSelection(context, tab),
+      ),
+    );
+  }
+}
+
+class _YearReadingCard extends StatelessWidget {
+  const _YearReadingCard({required this.overview});
+
+  final ChallengeOverview overview;
+
+  static const double _cellSize = 14;
+  static const double _cellGap = 5;
+  static const double _columnWidth = _cellSize + _cellGap;
+
+  @override
+  Widget build(BuildContext context) {
+    final monthOffsets = _buildMonthOffsets(overview.year);
+    final activityColumns = _buildActivityColumns(overview);
+    final gridWidth = activityColumns.length * _columnWidth;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 44,
+                height: 44,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: AppColors.primary.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: const Text('📖', style: TextStyle(fontSize: 22)),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Text(
+                  'Reading',
+                  style: TextStyle(
+                    color: AppColors.darkBlue,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              _MetricPill(
+                icon: Icons.av_timer_rounded,
+                label: '${(overview.completionRate * 100).round()}%',
+              ),
+              const SizedBox(width: 10),
+              _MetricPill(
+                icon: Icons.verified_rounded,
+                label: '${overview.activeDays}',
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: SizedBox(
+              width: gridWidth,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: 24,
+                    child: Stack(
+                      children: monthOffsets.entries.map((entry) {
+                        return Positioned(
+                          left: entry.value * _columnWidth,
+                          child: Text(
+                            entry.key,
+                            style: TextStyle(
+                              color: AppColors.darkBrown.withValues(alpha: 0.7),
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: activityColumns.map((column) {
+                      return Padding(
+                        padding: const EdgeInsets.only(right: _cellGap),
+                        child: Column(
+                          children: List.generate(column.length, (index) {
+                            final level = column[index];
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: _cellGap),
+                              child: Container(
+                                width: _cellSize,
+                                height: _cellSize,
+                                decoration: BoxDecoration(
+                                  color: _heatmapColor(level),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                              ),
+                            );
+                          }),
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MetricPill extends StatelessWidget {
+  const _MetricPill({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+      decoration: BoxDecoration(
+        color: AppColors.cream,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: AppColors.darkBrown),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: const TextStyle(
+              color: AppColors.darkBrown,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -726,43 +889,132 @@ class _DayStat {
 }
 
 _TodayGoalData _buildTodayGoal(HomeDashboardModel? dashboard) {
-  final currentReadingCount = dashboard?.currentReading.length ?? 0;
-  final activityCount = dashboard?.activityCount ?? 0;
-  final minutes = math.min(120, currentReadingCount * 8 + activityCount * 2);
-  final normalizedMinutes = minutes == 0 && currentReadingCount > 0
-      ? 10
-      : minutes;
+  final todayStats = dashboard?.statistics?.today;
+  final minutes = todayStats?.minutes ?? 0;
+  final progress = todayStats?.goalMinutes == null || todayStats!.goalMinutes <= 0
+      ? 0.0
+      : todayStats.progress.clamp(0, 1).toDouble();
 
   return _TodayGoalData(
-    minutes: normalizedMinutes,
-    progress: (normalizedMinutes / 30).clamp(0, 1),
+    minutes: minutes,
+    progress: progress,
   );
 }
 
 List<_DayStat> _buildWeekStats(HomeDashboardModel? dashboard) {
   const labels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  final streakDays = dashboard?.streakDays ?? 0;
-  final activityCount = dashboard?.activityCount ?? 0;
-  final currentReadingCount = dashboard?.currentReading.length ?? 0;
-  final base = currentReadingCount * 4 + activityCount;
-  final todayIndex = DateTime.now().weekday - 1;
+  final weekStats = dashboard?.statistics?.week ?? const <WeekdayStatistics>[];
 
-  return List.generate(labels.length, (index) {
-    final distance = (todayIndex - index).abs();
-    final minutes = math.max(
-      0,
-      base + (streakDays > 0 ? 6 - distance * 2 : 0) + (index.isEven ? 2 : -1),
-    );
+  if (weekStats.isNotEmpty) {
+    return weekStats
+        .map(
+          (item) => _DayStat(
+            label: item.label,
+            shortLabel: item.shortLabel,
+            minutes: item.minutes,
+          ),
+        )
+        .toList();
+  }
 
-    return _DayStat(
-      label: labels[index],
-      shortLabel: labels[index].substring(0, 2),
-      minutes: minutes,
-    );
-  });
+  return labels
+      .map(
+        (label) => _DayStat(
+          label: label,
+          shortLabel: label.substring(0, 2),
+          minutes: 0,
+        ),
+      )
+      .toList();
 }
 
 int _buildYearlyGoal(HomeDashboardModel? dashboard) {
-  final finishedCount = dashboard?.finishedInYear.length ?? 0;
-  return math.max(6, math.max(finishedCount + 3, 12));
+  final goal = dashboard?.statistics?.year.yearlyGoalBooks ?? 0;
+  return goal;
+}
+
+ChallengeOverview _buildChallengeOverview(HomeDashboardModel? dashboard) {
+  final now = DateTime.now();
+  final year = dashboard?.year ?? now.year;
+  final fallback = ChallengeOverview.empty();
+
+  if (dashboard == null) {
+    return fallback;
+  }
+  final yearStats = dashboard.statistics?.year;
+  if (yearStats == null) {
+    return fallback;
+  }
+
+  return ChallengeOverview(
+    year: year,
+    readingHours: yearStats.readingHours,
+    booksFinished: yearStats.booksFinished,
+    streakDays: dashboard.streakDays,
+    quotesSaved: yearStats.quotesSaved,
+    currentReadingCount: yearStats.currentReadingCount,
+    activeDays: yearStats.activeDays,
+    completionRate: yearStats.completionRate,
+    highlightedBookTitle: yearStats.highlightedBookTitle,
+    yearlyActivityLevels: yearStats.yearlyActivityLevels,
+  );
+}
+
+Map<String, int> _buildMonthOffsets(int year) {
+  const monthLabels = [
+    'J',
+    'F',
+    'M',
+    'A',
+    'M',
+    'J',
+    'J',
+    'A',
+    'S',
+    'O',
+    'N',
+    'D',
+  ];
+  final offsets = <String, int>{};
+
+  for (var month = 1; month <= 12; month++) {
+    final firstDay = DateTime(year, month, 1);
+    final weekIndex =
+        ((firstDay.difference(DateTime(year, 1, 1)).inDays) +
+            DateTime(year, 1, 1).weekday -
+            1) ~/
+        7;
+    offsets[monthLabels[month - 1]] = weekIndex;
+  }
+
+  return offsets;
+}
+
+List<List<int>> _buildActivityColumns(ChallengeOverview overview) {
+  final columns = List.generate(53, (_) => List<int>.filled(7, 0));
+  final start = DateTime(overview.year, 1, 1);
+
+  for (var index = 0; index < overview.yearlyActivityLevels.length; index++) {
+    final date = start.add(Duration(days: index));
+    final column = ((index + start.weekday - 1) ~/ 7).clamp(0, 52);
+    final row = date.weekday - 1;
+    columns[column][row] = overview.yearlyActivityLevels[index];
+  }
+
+  return columns;
+}
+
+Color _heatmapColor(int level) {
+  switch (level) {
+    case 4:
+      return const Color(0xFF1473E6);
+    case 3:
+      return const Color(0xFF1E88FF);
+    case 2:
+      return const Color(0xFF53A8FF);
+    case 1:
+      return const Color(0xFFA5D0FF);
+    default:
+      return const Color(0xFFF1F3F7);
+  }
 }
