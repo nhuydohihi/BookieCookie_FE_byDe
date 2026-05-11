@@ -99,8 +99,6 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
             final selectedStat = weekStats[_selectedDayIndex];
             final minuteGoal = _buildTodayGoal(dashboard);
             final yearlyGoal = _buildYearlyGoal(dashboard);
-            final achievements = _buildAchievements(dashboard);
-
             return RefreshIndicator(
               color: AppColors.primary,
               onRefresh: homeVM.loadDashboard,
@@ -141,8 +139,6 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
                               ? dashboard!.finishedInYear.first
                               : null,
                         ),
-                        const SizedBox(height: 28),
-                        _AchievementSection(achievements: achievements),
                         if (homeVM.errorMessage != null) ...[
                           const SizedBox(height: 20),
                           Text(
@@ -654,83 +650,6 @@ class _MiniStatLine extends StatelessWidget {
   }
 }
 
-class _AchievementSection extends StatelessWidget {
-  const _AchievementSection({required this.achievements});
-
-  final List<_AchievementItem> achievements;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Achieve',
-          style: TextStyle(
-            color: AppColors.darkBlue,
-            fontSize: 22,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-        const SizedBox(height: 16),
-        ...achievements.map(
-          (achievement) => Padding(
-            padding: const EdgeInsets.only(bottom: 12),
-            child: Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: achievement.tint.withValues(alpha: 0.16),
-                ),
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: achievement.tint.withValues(alpha: 0.12),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(achievement.icon, color: achievement.tint),
-                  ),
-                  const SizedBox(width: 14),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          achievement.title,
-                          style: const TextStyle(
-                            color: AppColors.darkBlue,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                        const SizedBox(height: 3),
-                        Text(
-                          achievement.description,
-                          style: TextStyle(
-                            color: AppColors.darkBrown.withValues(alpha: 0.76),
-                            height: 1.35,
-                            fontWeight: FontWeight.w600,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
 class _ArcProgressPainter extends CustomPainter {
   _ArcProgressPainter({
     required this.progress,
@@ -806,20 +725,6 @@ class _DayStat {
   final int minutes;
 }
 
-class _AchievementItem {
-  const _AchievementItem({
-    required this.title,
-    required this.description,
-    required this.icon,
-    required this.tint,
-  });
-
-  final String title;
-  final String description;
-  final IconData icon;
-  final Color tint;
-}
-
 _TodayGoalData _buildTodayGoal(HomeDashboardModel? dashboard) {
   final currentReadingCount = dashboard?.currentReading.length ?? 0;
   final activityCount = dashboard?.activityCount ?? 0;
@@ -860,41 +765,4 @@ List<_DayStat> _buildWeekStats(HomeDashboardModel? dashboard) {
 int _buildYearlyGoal(HomeDashboardModel? dashboard) {
   final finishedCount = dashboard?.finishedInYear.length ?? 0;
   return math.max(6, math.max(finishedCount + 3, 12));
-}
-
-List<_AchievementItem> _buildAchievements(HomeDashboardModel? dashboard) {
-  final streakDays = dashboard?.streakDays ?? 0;
-  final finishedCount = dashboard?.finishedInYear.length ?? 0;
-  final currentReadingCount = dashboard?.currentReading.length ?? 0;
-
-  return [
-    _AchievementItem(
-      title: streakDays > 0
-          ? '$streakDays days in a row'
-          : 'First streak starts now',
-      description: streakDays > 0
-          ? 'You kept your reading habit alive for $streakDays consecutive day(s).'
-          : 'Open a book today and turn your first session into a streak.',
-      icon: Icons.local_fire_department_rounded,
-      tint: AppColors.secondary,
-    ),
-    _AchievementItem(
-      title: '$finishedCount books completed',
-      description: finishedCount > 0
-          ? 'Nice work finishing $finishedCount book(s) this year.'
-          : 'Your first finished book of the year is waiting for you.',
-      icon: Icons.emoji_events_rounded,
-      tint: AppColors.primary,
-    ),
-    _AchievementItem(
-      title: currentReadingCount > 0
-          ? '$currentReadingCount active reading slot(s)'
-          : 'Build your reading shelf',
-      description: currentReadingCount > 0
-          ? 'You currently have $currentReadingCount book(s) in progress.'
-          : 'Add books to your library to unlock richer reading statistics.',
-      icon: Icons.auto_stories_rounded,
-      tint: AppColors.darkBlue,
-    ),
-  ];
 }

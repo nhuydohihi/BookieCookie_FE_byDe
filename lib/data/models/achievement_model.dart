@@ -94,12 +94,14 @@ class AchievementStats {
     required this.booksFinished,
     required this.streakDays,
     required this.quotesSaved,
+    required this.overview,
   });
 
   final int readingHours;
   final int booksFinished;
   final int streakDays;
   final int quotesSaved;
+  final ChallengeOverview overview;
 
   int valueFor(String targetType) {
     switch (targetType) {
@@ -114,6 +116,53 @@ class AchievementStats {
       default:
         return 0;
     }
+  }
+}
+
+class ChallengeOverview {
+  const ChallengeOverview({
+    required this.year,
+    required this.readingHours,
+    required this.booksFinished,
+    required this.streakDays,
+    required this.quotesSaved,
+    required this.currentReadingCount,
+    required this.activeDays,
+    required this.completionRate,
+    required this.yearlyActivityLevels,
+    this.highlightedBookTitle,
+  });
+
+  final int year;
+  final int readingHours;
+  final int booksFinished;
+  final int streakDays;
+  final int quotesSaved;
+  final int currentReadingCount;
+  final int activeDays;
+  final double completionRate;
+  final List<int> yearlyActivityLevels;
+  final String? highlightedBookTitle;
+
+  factory ChallengeOverview.empty() {
+    final now = DateTime.now();
+    final daysInYear = DateTime(
+      now.year + 1,
+      1,
+      1,
+    ).difference(DateTime(now.year, 1, 1)).inDays;
+
+    return ChallengeOverview(
+      year: now.year,
+      readingHours: 0,
+      booksFinished: 0,
+      streakDays: 0,
+      quotesSaved: 0,
+      currentReadingCount: 0,
+      activeDays: 0,
+      completionRate: 0,
+      yearlyActivityLevels: List<int>.filled(daysInYear, 0),
+    );
   }
 }
 

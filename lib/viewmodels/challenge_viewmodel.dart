@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../core/services/api_service.dart';
@@ -14,6 +16,7 @@ class ChallengeViewModel extends ChangeNotifier {
   final String? token;
 
   List<AchievementModel> achievements = const [];
+  ChallengeOverview overview = ChallengeOverview.empty();
   bool isLoading = false;
   String? errorMessage;
 
@@ -37,14 +40,17 @@ class ChallengeViewModel extends ChangeNotifier {
 
     try {
       final stats = await _loadStats();
+      overview = stats.overview;
       achievements = await _loadAchievements(stats);
     } catch (_) {
+      overview = ChallengeOverview.empty();
       achievements = _buildFallbackAchievements(
-        const AchievementStats(
+        AchievementStats(
           readingHours: 0,
           booksFinished: 0,
           streakDays: 0,
           quotesSaved: 0,
+          overview: ChallengeOverview.empty(),
         ),
       );
       errorMessage =
@@ -70,11 +76,14 @@ class ChallengeViewModel extends ChangeNotifier {
     final estimatedMinutes =
         dashboard.currentReading.length * 120 + dashboard.activityCount * 18;
 
+    final overview = _buildOverview(dashboard, estimatedMinutes);
+
     return AchievementStats(
       readingHours: (estimatedMinutes / 60).floor(),
       booksFinished: dashboard.finishedInYear.length,
       streakDays: dashboard.streakDays,
       quotesSaved: dashboard.activityCount * 2,
+      overview: overview,
     );
   }
 
@@ -213,4 +222,87 @@ class ChallengeViewModel extends ChangeNotifier {
 
   Map<String, String>? get _authHeaders =>
       token == null ? null : {'Authorization': 'Bearer $token'};
+
+  ChallengeOverview _buildOverview(
+    HomeDashboardModel dashboard,
+    int estimatedMinutes,
+  ) {
+    final now = DateTime.now();
+    final yearStart = DateTime(dashboard.year, 1, 1);
+    final yearEnd = DateTime(dashboard.year, 12, 31);
+    final elapsedDays = now.difference(yearStart).inDays + 1;
+    final safeElapsedDays = math.max(1, elapsedDays);
+    final today = DateTime(now.year, now.month, now.day);
+    final activityLevels = <int>[];
+    var activeDays = 0;
+
+    for (
+      var date = yearStart;
+      !date.isAfter(yearEnd);
+      date = date.add(const Duration(days: 1))
+    ) {
+      if (date.isAfter(today)) {
+        activityLevels.add(0);
+        continue;
+      }
+
+      final dayOfYear = date.difference(yearStart).inDays + 1;
+      final weekdayWeight = switch (date.weekday) {
+        DateTime.saturday || DateTime.sunday => 1,
+        DateTime.friday => 2,
+        _ => 3,
+      };
+      final rhythmSeed =
+          dayOfYear +
+          dashboard.activityCount * 3 +
+          dashboard.currentReading.length * 5 +
+          dashboard.finishedInYear.length * 7;
+      final rhythmValue = rhythmSeed % 10;
+      var level = 0;
+
+      if (rhythmValue < weekdayWeight + 2) {
+        level = 1;
+      }
+      if (rhythmValue < weekdayWeight) {
+        level = 2;
+      }
+      if (rhythmValue == 0 || rhythmValue == 1) {
+        level = 3;
+      }
+      if (dashboard.streakDays > 0 &&
+          dayOfYear >= elapsedDays - dashboard.streakDays + 1) {
+        level = 4;
+      }
+
+      if (dashboard.currentReading.isNotEmpty &&
+          date.weekday <= DateTime.friday &&
+          level == 0 &&
+          rhythmValue.isEven) {
+        level = 1;
+      }
+
+      activityLevels.add(level);
+      if (level > 0) {
+        activeDays++;
+      }
+    }
+
+    final readingHours = (estimatedMinutes / 60).floor();
+    final completionRate = (activeDays / safeElapsedDays).clamp(0.0, 1.0);
+
+    return ChallengeOverview(
+      year: dashboard.year,
+      readingHours: readingHours,
+      booksFinished: dashboard.finishedInYear.length,
+      streakDays: dashboard.streakDays,
+      quotesSaved: dashboard.activityCount * 2,
+      currentReadingCount: dashboard.currentReading.length,
+      activeDays: activeDays,
+      completionRate: completionRate,
+      highlightedBookTitle: dashboard.finishedInYear.isNotEmpty
+          ? dashboard.finishedInYear.first.title
+          : null,
+      yearlyActivityLevels: activityLevels,
+    );
+  }
 }
