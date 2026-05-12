@@ -6,6 +6,7 @@ import '../data/models/book_detail_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/book_detail_viewmodel.dart';
 import 'manual_add_book_page.dart';
+import 'quote_scan_page.dart';
 import 'reading_page.dart';
 
 class BookDetailPage extends StatelessWidget {
@@ -95,6 +96,32 @@ class _BookDetailViewState extends State<_BookDetailView> {
     }
   }
 
+  Future<void> _openQuoteScanner(
+    BuildContext context,
+    BookDetailViewModel viewModel,
+  ) async {
+    final detail = viewModel.detail;
+    if (detail == null) return;
+
+    final created = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => QuoteScanPage(
+          user: widget.user,
+          userBookId: detail.id,
+          bookTitle: detail.title,
+          token: widget.token,
+        ),
+      ),
+    );
+
+    if (created == true && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Quote đã được thêm vào sách này.')),
+      );
+    }
+  }
+
   void _handleBack() {
     Navigator.pop(context, _didChange);
   }
@@ -155,6 +182,11 @@ class _BookDetailViewState extends State<_BookDetailView> {
                         _DetailActionButton(
                           icon: Icons.edit_rounded,
                           onTap: () => _openEdit(context, viewModel),
+                        ),
+                        const SizedBox(width: 10),
+                        _DetailActionButton(
+                          icon: Icons.format_quote_rounded,
+                          onTap: () => _openQuoteScanner(context, viewModel),
                         ),
                         const SizedBox(width: 10),
                         _DetailActionButton(
