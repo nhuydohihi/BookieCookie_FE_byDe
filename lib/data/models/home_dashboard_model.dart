@@ -2,6 +2,7 @@ class HomeDashboardModel {
   const HomeDashboardModel({
     required this.currentReading,
     required this.streakDays,
+    required this.maxStreakDays,
     required this.activityCount,
     required this.finishedInYear,
     required this.year,
@@ -11,6 +12,7 @@ class HomeDashboardModel {
 
   final List<CurrentReadingBook> currentReading;
   final int streakDays;
+  final int maxStreakDays;
   final int activityCount;
   final List<FinishedBook> finishedInYear;
   final int year;
@@ -24,9 +26,12 @@ class HomeDashboardModel {
 
     return HomeDashboardModel(
       currentReading: currentReadingJson
-          .map((item) => CurrentReadingBook.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) => CurrentReadingBook.fromJson(item as Map<String, dynamic>),
+          )
           .toList(),
       streakDays: (streakJson['days'] as num?)?.toInt() ?? 0,
+      maxStreakDays: (streakJson['max_days'] as num?)?.toInt() ?? 0,
       activityCount: (streakJson['activity_count'] as num?)?.toInt() ?? 0,
       finishedInYear: finishedJson
           .map((item) => FinishedBook.fromJson(item as Map<String, dynamic>))
@@ -48,11 +53,13 @@ class DashboardStatistics {
   const DashboardStatistics({
     required this.today,
     required this.week,
+    required this.chart,
     required this.year,
   });
 
   final TodayStatistics today;
   final List<WeekdayStatistics> week;
+  final ReadingChartStatistics chart;
   final YearStatistics year;
 
   factory DashboardStatistics.fromJson(Map<String, dynamic> json) {
@@ -63,8 +70,13 @@ class DashboardStatistics {
         json['today'] as Map<String, dynamic>? ?? const {},
       ),
       week: weekJson
-          .map((item) => WeekdayStatistics.fromJson(item as Map<String, dynamic>))
+          .map(
+            (item) => WeekdayStatistics.fromJson(item as Map<String, dynamic>),
+          )
           .toList(),
+      chart: ReadingChartStatistics.fromJson(
+        json['chart'] as Map<String, dynamic>? ?? const {},
+      ),
       year: YearStatistics.fromJson(
         json['year'] as Map<String, dynamic>? ?? const {},
       ),
@@ -164,11 +176,59 @@ class YearStatistics {
   }
 }
 
-class DashboardGoals {
-  const DashboardGoals({
-    required this.yearlyBooks,
-    required this.monthlyHours,
+class ReadingChartStatistics {
+  const ReadingChartStatistics({required this.week, required this.month});
+
+  final List<ReadingChartPoint> week;
+  final List<ReadingChartPoint> month;
+
+  factory ReadingChartStatistics.fromJson(Map<String, dynamic> json) {
+    final weekJson = json['week'] as List<dynamic>? ?? [];
+    final monthJson = json['month'] as List<dynamic>? ?? [];
+
+    return ReadingChartStatistics(
+      week: weekJson
+          .map(
+            (item) => ReadingChartPoint.fromJson(item as Map<String, dynamic>),
+          )
+          .toList(),
+      month: monthJson
+          .map(
+            (item) => ReadingChartPoint.fromJson(item as Map<String, dynamic>),
+          )
+          .toList(),
+    );
+  }
+}
+
+class ReadingChartPoint {
+  const ReadingChartPoint({
+    required this.label,
+    required this.shortLabel,
+    required this.minutes,
+    required this.pagesRead,
+    this.date,
   });
+
+  final String label;
+  final String shortLabel;
+  final int minutes;
+  final int pagesRead;
+  final DateTime? date;
+
+  factory ReadingChartPoint.fromJson(Map<String, dynamic> json) {
+    return ReadingChartPoint(
+      label: json['label'] as String? ?? '',
+      shortLabel: json['short_label'] as String? ?? '',
+      minutes: _toInt(json['minutes']),
+      pagesRead: _toInt(json['pages_read']),
+      date: _toDateTime(json['date']),
+    );
+  }
+}
+
+class DashboardGoals {
+  const DashboardGoals({required this.yearlyBooks, required this.monthlyHours});
 
   final int yearlyBooks;
   final int monthlyHours;
@@ -202,7 +262,9 @@ class CurrentReadingBook {
 
     return CurrentReadingBook(
       id: rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0,
-      bookId: rawBookId is num ? rawBookId.toInt() : int.tryParse('$rawBookId') ?? 0,
+      bookId: rawBookId is num
+          ? rawBookId.toInt()
+          : int.tryParse('$rawBookId') ?? 0,
       title: json['title'] as String? ?? 'Untitled',
       author: json['author'] as String? ?? 'Unknown author',
       coverImageUrl: json['cover_image_url'] as String?,
@@ -255,7 +317,9 @@ class FinishedBook {
 
     return FinishedBook(
       id: rawId is num ? rawId.toInt() : int.tryParse('$rawId') ?? 0,
-      bookId: rawBookId is num ? rawBookId.toInt() : int.tryParse('$rawBookId') ?? 0,
+      bookId: rawBookId is num
+          ? rawBookId.toInt()
+          : int.tryParse('$rawBookId') ?? 0,
       title: json['title'] as String? ?? 'Untitled',
       author: json['author'] as String? ?? 'Unknown author',
       coverImageUrl: json['cover_image_url'] as String?,

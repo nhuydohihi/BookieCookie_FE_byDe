@@ -41,6 +41,7 @@ class _StatisticPageView extends StatefulWidget {
 
 class _StatisticPageViewState extends State<_StatisticPageView> {
   late int _selectedDayIndex;
+  _ChartRange _selectedChartRange = _ChartRange.week;
 
   @override
   void initState() {
@@ -101,6 +102,7 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
             final minuteGoal = _buildTodayGoal(dashboard);
             final yearlyGoal = _buildYearlyGoal(dashboard);
             final overview = _buildChallengeOverview(dashboard);
+            final chartData = _buildChartData(dashboard, _selectedChartRange);
             return RefreshIndicator(
               color: AppColors.primary,
               onRefresh: homeVM.loadDashboard,
@@ -120,12 +122,27 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
                           isLoading: homeVM.isLoading,
                         ),
                         const SizedBox(height: 20),
+                        _StreakSummaryRow(
+                          currentStreak: dashboard?.streakDays ?? 0,
+                          maxStreak: dashboard?.maxStreakDays ?? 0,
+                        ),
+                        const SizedBox(height: 20),
                         _WeekStrip(
                           stats: weekStats,
                           selectedIndex: _selectedDayIndex,
                           onSelected: (index) {
                             setState(() {
                               _selectedDayIndex = index;
+                            });
+                          },
+                        ),
+                        const SizedBox(height: 28),
+                        _ReadingTimeChartCard(
+                          chartData: chartData,
+                          selectedRange: _selectedChartRange,
+                          onRangeChanged: (range) {
+                            setState(() {
+                              _selectedChartRange = range;
                             });
                           },
                         ),
@@ -423,6 +440,14 @@ class _TodayGoalCard extends StatelessWidget {
                         ),
                       )
                     else ...[
+                      Icon(
+                        Icons.local_fire_department_rounded,
+                        size: 42,
+                        color: minutes > 0
+                            ? AppColors.secondary
+                            : AppColors.darkBrown.withValues(alpha: 0.28),
+                      ),
+                      const SizedBox(height: 10),
                       Text(
                         '$minutes',
                         style: const TextStyle(
@@ -431,6 +456,7 @@ class _TodayGoalCard extends StatelessWidget {
                           fontWeight: FontWeight.w800,
                         ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         'minutes',
                         style: TextStyle(
@@ -484,6 +510,321 @@ class _TodayGoalCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _StreakSummaryRow extends StatelessWidget {
+  const _StreakSummaryRow({
+    required this.currentStreak,
+    required this.maxStreak,
+  });
+
+  final int currentStreak;
+  final int maxStreak;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+          child: _StreakStatCard(
+            icon: Icons.local_fire_department_rounded,
+            iconColor: const Color(0xFFFF5A5F),
+            iconBackground: const Color(0xFFFFECEC),
+            value: currentStreak,
+            label: 'CURRENT STREAK',
+          ),
+        ),
+        const SizedBox(width: 16),
+        Expanded(
+          child: _StreakStatCard(
+            icon: Icons.emoji_events_rounded,
+            iconColor: const Color(0xFFFFA000),
+            iconBackground: const Color(0xFFFFF4DD),
+            value: maxStreak,
+            label: 'MAX STREAK',
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _StreakStatCard extends StatelessWidget {
+  const _StreakStatCard({
+    required this.icon,
+    required this.iconColor,
+    required this.iconBackground,
+    required this.value,
+    required this.label,
+  });
+
+  final IconData icon;
+  final Color iconColor;
+  final Color iconBackground;
+  final int value;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 54,
+            height: 54,
+            decoration: BoxDecoration(
+              color: iconBackground,
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: iconColor, size: 28),
+          ),
+          const SizedBox(height: 18),
+          Text(
+            '$value',
+            style: const TextStyle(
+              color: Colors.black,
+              fontSize: 40,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            label,
+            style: TextStyle(
+              color: AppColors.darkBrown.withValues(alpha: 0.56),
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReadingTimeChartCard extends StatelessWidget {
+  const _ReadingTimeChartCard({
+    required this.chartData,
+    required this.selectedRange,
+    required this.onRangeChanged,
+  });
+
+  final _ChartData chartData;
+  final _ChartRange selectedRange;
+  final ValueChanged<_ChartRange> onRangeChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalMinutes = chartData.points.fold<int>(
+      0,
+      (sum, point) => sum + point.minutes,
+    );
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(22, 22, 22, 20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(32),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.04),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Reading time',
+            style: TextStyle(
+              color: AppColors.darkBlue,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 18),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$totalMinutes',
+                    style: const TextStyle(
+                      color: AppColors.darkBlue,
+                      fontSize: 38,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  Text(
+                    'minutes ${selectedRange == _ChartRange.week ? 'this week' : 'this month'}',
+                    style: TextStyle(
+                      color: AppColors.darkBrown.withValues(alpha: 0.68),
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+              const Spacer(),
+              _ChartRangeSwitch(
+                selectedRange: selectedRange,
+                onChanged: onRangeChanged,
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(height: 220, child: _LineChart(points: chartData.points)),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChartRangeSwitch extends StatelessWidget {
+  const _ChartRangeSwitch({
+    required this.selectedRange,
+    required this.onChanged,
+  });
+
+  final _ChartRange selectedRange;
+  final ValueChanged<_ChartRange> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: AppColors.cream,
+        borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ChartRangeChip(
+            label: 'Week',
+            isSelected: selectedRange == _ChartRange.week,
+            onTap: () => onChanged(_ChartRange.week),
+          ),
+          _ChartRangeChip(
+            label: 'Month',
+            isSelected: selectedRange == _ChartRange.month,
+            onTap: () => onChanged(_ChartRange.month),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChartRangeChip extends StatelessWidget {
+  const _ChartRangeChip({
+    required this.label,
+    required this.isSelected,
+    required this.onTap,
+  });
+
+  final String label;
+  final bool isSelected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.white : Colors.transparent,
+          borderRadius: BorderRadius.circular(14),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: AppColors.darkBlue,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _LineChart extends StatelessWidget {
+  const _LineChart({required this.points});
+
+  final List<_ChartPoint> points;
+
+  @override
+  Widget build(BuildContext context) {
+    if (points.isEmpty) {
+      return Center(
+        child: Text(
+          'No reading data yet.',
+          style: TextStyle(
+            color: AppColors.darkBrown.withValues(alpha: 0.68),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      );
+    }
+
+    final contentWidth = math.max(320.0, points.length * 28.0);
+
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SizedBox(
+        width: contentWidth,
+        child: Column(
+          children: [
+            Expanded(
+              child: CustomPaint(
+                size: Size(contentWidth, 180),
+                painter: _LineChartPainter(points: points),
+              ),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: points
+                  .map(
+                    (point) => Expanded(
+                      child: Text(
+                        point.shortLabel,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: AppColors.darkBrown.withValues(alpha: 0.62),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -813,6 +1154,110 @@ class _MiniStatLine extends StatelessWidget {
   }
 }
 
+class _LineChartPainter extends CustomPainter {
+  _LineChartPainter({required this.points});
+
+  final List<_ChartPoint> points;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const padding = EdgeInsets.fromLTRB(14, 10, 14, 18);
+    final chartWidth = size.width - padding.left - padding.right;
+    final chartHeight = size.height - padding.top - padding.bottom;
+    final maxMinutes = math.max(
+      20,
+      points.fold<int>(
+        0,
+        (maxValue, point) => math.max(maxValue, point.minutes),
+      ),
+    );
+
+    final guidePaint = Paint()
+      ..color = AppColors.darkBrown.withValues(alpha: 0.12)
+      ..strokeWidth = 1;
+
+    for (var step = 0; step < 4; step++) {
+      final y = padding.top + (chartHeight * step / 3);
+      canvas.drawLine(
+        Offset(padding.left, y),
+        Offset(size.width - padding.right, y),
+        guidePaint,
+      );
+    }
+
+    final path = Path();
+    final fillPath = Path();
+    final spots = <Offset>[];
+
+    for (var index = 0; index < points.length; index++) {
+      final dx = points.length == 1
+          ? padding.left + (chartWidth / 2)
+          : padding.left + (chartWidth * index / (points.length - 1));
+      final dy =
+          padding.top +
+          chartHeight -
+          (points[index].minutes / maxMinutes) * chartHeight;
+      final spot = Offset(dx, dy);
+      spots.add(spot);
+
+      if (index == 0) {
+        path.moveTo(dx, dy);
+        fillPath
+          ..moveTo(dx, padding.top + chartHeight)
+          ..lineTo(dx, dy);
+      } else {
+        path.lineTo(dx, dy);
+        fillPath.lineTo(dx, dy);
+      }
+    }
+
+    if (spots.isNotEmpty) {
+      fillPath
+        ..lineTo(spots.last.dx, padding.top + chartHeight)
+        ..close();
+    }
+
+    final fillPaint = Paint()
+      ..shader =
+          LinearGradient(
+            colors: [
+              AppColors.primary.withValues(alpha: 0.20),
+              AppColors.primary.withValues(alpha: 0.02),
+            ],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ).createShader(
+            Rect.fromLTWH(padding.left, padding.top, chartWidth, chartHeight),
+          );
+
+    final linePaint = Paint()
+      ..color = AppColors.primary
+      ..strokeWidth = 3
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    canvas.drawPath(fillPath, fillPaint);
+    canvas.drawPath(path, linePaint);
+
+    final pointFillPaint = Paint()..color = Colors.white;
+    final pointStrokePaint = Paint()
+      ..color = AppColors.primary
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.5;
+
+    for (final spot in spots) {
+      canvas.drawCircle(spot, 4, pointFillPaint);
+      canvas.drawCircle(spot, 4, pointStrokePaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _LineChartPainter oldDelegate) {
+    return oldDelegate.points != points;
+  }
+}
+
 class _ArcProgressPainter extends CustomPainter {
   _ArcProgressPainter({
     required this.progress,
@@ -888,17 +1333,35 @@ class _DayStat {
   final int minutes;
 }
 
+enum _ChartRange { week, month }
+
+class _ChartPoint {
+  const _ChartPoint({
+    required this.label,
+    required this.shortLabel,
+    required this.minutes,
+  });
+
+  final String label;
+  final String shortLabel;
+  final int minutes;
+}
+
+class _ChartData {
+  const _ChartData({required this.points});
+
+  final List<_ChartPoint> points;
+}
+
 _TodayGoalData _buildTodayGoal(HomeDashboardModel? dashboard) {
   final todayStats = dashboard?.statistics?.today;
   final minutes = todayStats?.minutes ?? 0;
-  final progress = todayStats?.goalMinutes == null || todayStats!.goalMinutes <= 0
+  final progress =
+      todayStats?.goalMinutes == null || todayStats!.goalMinutes <= 0
       ? 0.0
       : todayStats.progress.clamp(0, 1).toDouble();
 
-  return _TodayGoalData(
-    minutes: minutes,
-    progress: progress,
-  );
+  return _TodayGoalData(minutes: minutes, progress: progress);
 }
 
 List<_DayStat> _buildWeekStats(HomeDashboardModel? dashboard) {
@@ -926,6 +1389,26 @@ List<_DayStat> _buildWeekStats(HomeDashboardModel? dashboard) {
         ),
       )
       .toList();
+}
+
+_ChartData _buildChartData(HomeDashboardModel? dashboard, _ChartRange range) {
+  final chart = dashboard?.statistics?.chart;
+  final source = switch (range) {
+    _ChartRange.week => chart?.week ?? const <ReadingChartPoint>[],
+    _ChartRange.month => chart?.month ?? const <ReadingChartPoint>[],
+  };
+
+  return _ChartData(
+    points: source
+        .map(
+          (item) => _ChartPoint(
+            label: item.label,
+            shortLabel: item.shortLabel,
+            minutes: item.minutes,
+          ),
+        )
+        .toList(),
+  );
 }
 
 int _buildYearlyGoal(HomeDashboardModel? dashboard) {
