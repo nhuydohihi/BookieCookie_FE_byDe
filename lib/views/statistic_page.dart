@@ -264,59 +264,71 @@ class _YearReadingCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: SizedBox(
-              width: gridWidth,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  SizedBox(
-                    height: 24,
-                    child: Stack(
-                      children: monthOffsets.entries.map((entry) {
-                        return Positioned(
-                          left: entry.value * _columnWidth,
-                          child: Text(
-                            entry.key,
-                            style: TextStyle(
-                              color: AppColors.darkBrown.withValues(alpha: 0.7),
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        );
-                      }).toList(),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: activityColumns.map((column) {
-                      return Padding(
-                        padding: const EdgeInsets.only(right: _cellGap),
-                        child: Column(
-                          children: List.generate(column.length, (index) {
-                            final level = column[index];
-                            return Padding(
-                              padding: const EdgeInsets.only(bottom: _cellGap),
-                              child: Container(
-                                width: _cellSize,
-                                height: _cellSize,
-                                decoration: BoxDecoration(
-                                  color: _heatmapColor(level),
-                                  borderRadius: BorderRadius.circular(4),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              return SizedBox(
+                width: double.infinity,
+                child: FittedBox(
+                  fit: BoxFit.fitWidth,
+                  alignment: Alignment.topLeft,
+                  child: SizedBox(
+                    width: gridWidth,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        SizedBox(
+                          height: 24,
+                          child: Stack(
+                            children: monthOffsets.entries.map((entry) {
+                              return Positioned(
+                                left: entry.value * _columnWidth,
+                                child: Text(
+                                  entry.key,
+                                  style: TextStyle(
+                                    color: AppColors.darkBrown.withValues(
+                                      alpha: 0.7,
+                                    ),
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
+                              );
+                            }).toList(),
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: activityColumns.map((column) {
+                            return Padding(
+                              padding: const EdgeInsets.only(right: _cellGap),
+                              child: Column(
+                                children: List.generate(column.length, (index) {
+                                  final level = column[index];
+                                  return Padding(
+                                    padding: const EdgeInsets.only(
+                                      bottom: _cellGap,
+                                    ),
+                                    child: Container(
+                                      width: _cellSize,
+                                      height: _cellSize,
+                                      decoration: BoxDecoration(
+                                        color: _heatmapColor(level),
+                                        borderRadius: BorderRadius.circular(4),
+                                      ),
+                                    ),
+                                  );
+                                }),
                               ),
                             );
-                          }),
+                          }).toList(),
                         ),
-                      );
-                    }).toList(),
+                      ],
+                    ),
                   ),
-                ],
-              ),
-            ),
+                ),
+              );
+            },
           ),
         ],
       ),
@@ -401,9 +413,11 @@ class _TodayGoalCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final hasReadToday = minutes > 0;
+
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(22, 24, 22, 20),
+      padding: const EdgeInsets.fromLTRB(22, 24, 22, 24),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(32),
@@ -425,7 +439,12 @@ class _TodayGoalCard extends StatelessWidget {
               children: [
                 CustomPaint(
                   size: const Size.square(208),
-                  painter: _ArcProgressPainter(progress: progress),
+                  painter: _ArcProgressPainter(
+                    progress: progress,
+                    progressColor: hasReadToday
+                        ? AppColors.secondary
+                        : AppColors.primary,
+                  ),
                 ),
                 Column(
                   mainAxisSize: MainAxisSize.min,
@@ -440,14 +459,6 @@ class _TodayGoalCard extends StatelessWidget {
                         ),
                       )
                     else ...[
-                      Icon(
-                        Icons.local_fire_department_rounded,
-                        size: 42,
-                        color: minutes > 0
-                            ? AppColors.secondary
-                            : AppColors.darkBrown.withValues(alpha: 0.28),
-                      ),
-                      const SizedBox(height: 10),
                       Text(
                         '$minutes',
                         style: const TextStyle(
@@ -480,35 +491,6 @@ class _TodayGoalCard extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 18),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: AppColors.primary.withValues(alpha: 0.10),
-              borderRadius: BorderRadius.circular(18),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.local_fire_department_rounded,
-                  color: AppColors.secondary,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    streakDays == 0
-                        ? 'Read a little today to start your streak.'
-                        : 'You are on a $streakDays-day reading streak.',
-                    style: const TextStyle(
-                      color: AppColors.darkBlue,
-                      fontWeight: FontWeight.w700,
-                      height: 1.35,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
         ],
       ),
     );
@@ -534,7 +516,7 @@ class _StreakSummaryRow extends StatelessWidget {
             iconColor: const Color(0xFFFF5A5F),
             iconBackground: const Color(0xFFFFECEC),
             value: currentStreak,
-            label: 'CURRENT STREAK',
+            label: 'Current streak',
           ),
         ),
         const SizedBox(width: 16),
@@ -544,7 +526,7 @@ class _StreakSummaryRow extends StatelessWidget {
             iconColor: const Color(0xFFFFA000),
             iconBackground: const Color(0xFFFFF4DD),
             value: maxStreak,
-            label: 'MAX STREAK',
+            label: 'Max streak',
           ),
         ),
       ],
@@ -868,6 +850,7 @@ class _WeekStrip extends StatelessWidget {
             children: List.generate(stats.length, (index) {
               final item = stats[index];
               final isSelected = index == selectedIndex;
+              final hasRead = item.minutes > 0;
 
               return Expanded(
                 child: Padding(
@@ -911,13 +894,19 @@ class _WeekStrip extends StatelessWidget {
                               decoration: BoxDecoration(
                                 color: isSelected
                                     ? Colors.white
+                                    : hasRead
+                                    ? AppColors.secondary.withValues(
+                                        alpha: 0.18,
+                                      )
                                     : AppColors.cream,
                                 shape: BoxShape.circle,
                               ),
                               child: Text(
-                                '${item.minutes}',
-                                style: const TextStyle(
-                                  color: AppColors.darkBlue,
+                                '${item.dayOfMonth}',
+                                style: TextStyle(
+                                  color: hasRead && !isSelected
+                                      ? AppColors.secondary
+                                      : AppColors.darkBlue,
                                   fontWeight: FontWeight.w800,
                                 ),
                               ),
@@ -1325,11 +1314,13 @@ class _DayStat {
   const _DayStat({
     required this.label,
     required this.shortLabel,
+    required this.dayOfMonth,
     required this.minutes,
   });
 
   final String label;
   final String shortLabel;
+  final int dayOfMonth;
   final int minutes;
 }
 
@@ -1374,17 +1365,24 @@ List<_DayStat> _buildWeekStats(HomeDashboardModel? dashboard) {
           (item) => _DayStat(
             label: item.label,
             shortLabel: item.shortLabel,
+            dayOfMonth: item.date?.day ?? 0,
             minutes: item.minutes,
           ),
         )
         .toList();
   }
 
+  final now = DateTime.now();
+  final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+
   return labels
+      .asMap()
+      .entries
       .map(
-        (label) => _DayStat(
-          label: label,
-          shortLabel: label.substring(0, 2),
+        (entry) => _DayStat(
+          label: entry.value,
+          shortLabel: entry.value.substring(0, 2),
+          dayOfMonth: startOfWeek.add(Duration(days: entry.key)).day,
           minutes: 0,
         ),
       )
@@ -1445,18 +1443,18 @@ ChallengeOverview _buildChallengeOverview(HomeDashboardModel? dashboard) {
 
 Map<String, int> _buildMonthOffsets(int year) {
   const monthLabels = [
-    'J',
-    'F',
-    'M',
-    'A',
-    'M',
-    'J',
-    'J',
-    'A',
-    'S',
-    'O',
-    'N',
-    'D',
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
   ];
   final offsets = <String, int>{};
 
@@ -1467,20 +1465,21 @@ Map<String, int> _buildMonthOffsets(int year) {
             DateTime(year, 1, 1).weekday -
             1) ~/
         7;
-    offsets[monthLabels[month - 1]] = weekIndex;
+    offsets[monthLabels[month - 1]] = weekIndex ~/ 2;
   }
 
   return offsets;
 }
 
 List<List<int>> _buildActivityColumns(ChallengeOverview overview) {
-  final columns = List.generate(53, (_) => List<int>.filled(7, 0));
+  final columns = List.generate(27, (_) => List<int>.filled(14, 0));
   final start = DateTime(overview.year, 1, 1);
 
   for (var index = 0; index < overview.yearlyActivityLevels.length; index++) {
     final date = start.add(Duration(days: index));
-    final column = ((index + start.weekday - 1) ~/ 7).clamp(0, 52);
-    final row = date.weekday - 1;
+    final weekIndex = ((index + start.weekday - 1) ~/ 7);
+    final column = (weekIndex ~/ 2).clamp(0, 26);
+    final row = date.weekday - 1 + ((weekIndex % 2) * 7);
     columns[column][row] = overview.yearlyActivityLevels[index];
   }
 
