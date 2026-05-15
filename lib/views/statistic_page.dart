@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants/app_colors.dart';
+import '../core/services/api_service.dart';
 import '../data/models/achievement_model.dart';
 import '../data/models/home_dashboard_model.dart';
 import '../data/models/user_model.dart';
@@ -89,6 +90,113 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
     }
   }
 
+  Future<void> _editYearlyGoal({
+    required int initialGoal,
+    required int year,
+  }) async {
+    final homeViewModel = context.read<HomeViewModel>();
+    final controller = TextEditingController(
+      text: initialGoal > 0 ? '$initialGoal' : '',
+    );
+    String? errorText;
+
+    final updatedGoal = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Edit yearly goal'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Set how many books you want to finish in $year.',
+                    style: TextStyle(
+                      color: AppColors.darkBrown.withValues(alpha: 0.74),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: controller,
+                    keyboardType: TextInputType.number,
+                    autofocus: true,
+                    decoration: InputDecoration(
+                      labelText: 'Books target',
+                      errorText: errorText,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () {
+                    final parsed = int.tryParse(controller.text.trim());
+                    if (parsed == null || parsed <= 0) {
+                      setDialogState(() {
+                        errorText = 'Please enter a valid number greater than 0.';
+                      });
+                      return;
+                    }
+                    Navigator.of(dialogContext).pop(parsed);
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    try {
+      if (updatedGoal == null || !mounted) {
+        return;
+      }
+
+      await homeViewModel.updateYearlyGoal(
+        updatedGoal,
+        year: year,
+      );
+      if (!mounted) {
+        return;
+      }
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.hideCurrentSnackBar();
+      messenger?.showSnackBar(
+        const SnackBar(content: Text('Yearly goal updated.')),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.hideCurrentSnackBar();
+      messenger?.showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    } catch (error) {
+      if (!mounted) {
+        return;
+      }
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.hideCurrentSnackBar();
+      messenger?.showSnackBar(
+        SnackBar(content: Text('Could not update yearly goal: $error')),
+      );
+    } finally {
+      controller.dispose();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -151,10 +259,15 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
                         const SizedBox(height: 28),
                         _YearlyOverviewCard(
                           year: dashboard?.year ?? DateTime.now().year,
-                          finishedCount: dashboard?.finishedInYear.length ?? 0,
+                          finishedCount:
+                              dashboard?.statistics?.year.booksFinished ?? 0,
                           yearlyGoal: yearlyGoal,
                           currentReadingCount:
                               dashboard?.currentReading.length ?? 0,
+                          onEditGoal: () => _editYearlyGoal(
+                            initialGoal: yearlyGoal,
+                            year: dashboard?.year ?? DateTime.now().year,
+                          ),
                           highlightedBook:
                               dashboard?.finishedInYear.isNotEmpty == true
                               ? dashboard!.finishedInYear.first
@@ -932,6 +1045,7 @@ class _YearlyOverviewCard extends StatelessWidget {
     required this.finishedCount,
     required this.yearlyGoal,
     required this.currentReadingCount,
+    required this.onEditGoal,
     required this.highlightedBook,
   });
 
@@ -939,6 +1053,7 @@ class _YearlyOverviewCard extends StatelessWidget {
   final int finishedCount;
   final int yearlyGoal;
   final int currentReadingCount;
+  final VoidCallback onEditGoal;
   final FinishedBook? highlightedBook;
 
   @override
@@ -959,20 +1074,43 @@ class _YearlyOverviewCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'My yearly goal',
-            style: const TextStyle(
-              color: AppColors.darkBlue,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Expanded(
+                  child: Text(
+                    'My yearly goal',
+                    style: TextStyle(
+                      color: AppColors.darkBlue,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ),
+                SizedBox(
+                  width: 34,
+                  height: 34,
+                  child: Material(
+                    color: AppColors.cream,
+                    borderRadius: BorderRadius.circular(12),
+                    child: InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: onEditGoal,
+                      child: const Icon(
+                        Icons.edit_rounded,
+                        size: 18,
+                        color: AppColors.darkBrown,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 18),
-          Row(
-            children: [
+            const SizedBox(height: 18),
+            Row(
+              children: [
               SizedBox(
                 width: 128,
                 height: 128,
@@ -1410,7 +1548,10 @@ _ChartData _buildChartData(HomeDashboardModel? dashboard, _ChartRange range) {
 }
 
 int _buildYearlyGoal(HomeDashboardModel? dashboard) {
-  final goal = dashboard?.statistics?.year.yearlyGoalBooks ?? 0;
+  final goal =
+      dashboard?.statistics?.year.yearlyGoalBooks ??
+      dashboard?.goals?.yearlyBooks ??
+      0;
   return goal;
 }
 

@@ -170,6 +170,12 @@ class ApiService {
       return result;
     }
 
+    if (response.statusCode == 429) {
+      throw const ApiException(
+        'Dich vu sach online dang gioi han qua nhieu yeu cau. Hay doi mot luc roi thu lai.',
+      );
+    }
+
     throw ApiException(
       result['message'] as String? ?? 'Server trả về lỗi ${response.statusCode}.',
     );

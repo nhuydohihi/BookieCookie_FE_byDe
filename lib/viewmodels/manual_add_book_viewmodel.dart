@@ -137,11 +137,13 @@ class ManualAddBookViewModel extends ChangeNotifier {
 
     try {
       final query = Uri.encodeQueryComponent(trimmedKeyword);
-      final result = await _apiService.getByUrl(
-        'https://www.googleapis.com/books/v1/volumes?q=$query&maxResults=10&printType=books',
+      final result = await _apiService.get(
+        '/books/search?query=$query',
+        headers: token == null ? null : {'Authorization': 'Bearer $token'},
       );
 
-      final items = result['items'];
+      final data = result['data'] as Map<String, dynamic>? ?? const {};
+      final items = data['items'];
       if (items is List) {
         searchResults = items
             .whereType<Map>()
