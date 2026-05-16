@@ -23,8 +23,11 @@ class StatisticPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final currentYear = DateTime.now().year;
     return ChangeNotifierProvider(
-      create: (_) => HomeViewModel(user: user, token: token)..loadDashboard(),
+      create: (_) =>
+          HomeViewModel(user: user, token: token)
+            ..loadDashboard(year: currentYear),
       child: _StatisticPageView(user: user, token: token),
     );
   }
@@ -42,12 +45,26 @@ class _StatisticPageView extends StatefulWidget {
 
 class _StatisticPageViewState extends State<_StatisticPageView> {
   late int _selectedDayIndex;
+  late int _selectedYear;
   _ChartRange _selectedChartRange = _ChartRange.week;
 
   @override
   void initState() {
     super.initState();
     _selectedDayIndex = DateTime.now().weekday - 1;
+    _selectedYear = DateTime.now().year;
+  }
+
+  Future<void> _changeYear(int year) async {
+    if (_selectedYear == year) {
+      return;
+    }
+
+    setState(() {
+      _selectedYear = year;
+    });
+
+    await context.read<HomeViewModel>().loadDashboard(year: year);
   }
 
   void _handleTabSelection(BuildContext context, AppTab tab) {
@@ -142,7 +159,8 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
                     final parsed = int.tryParse(controller.text.trim());
                     if (parsed == null || parsed <= 0) {
                       setDialogState(() {
-                        errorText = 'Please enter a valid number greater than 0.';
+                        errorText =
+                            'Please enter a valid number greater than 0.';
                       });
                       return;
                     }
@@ -162,10 +180,7 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
         return;
       }
 
-      await homeViewModel.updateYearlyGoal(
-        updatedGoal,
-        year: year,
-      );
+      await homeViewModel.updateYearlyGoal(updatedGoal, year: year);
       if (!mounted) {
         return;
       }
@@ -180,9 +195,7 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
       }
       final messenger = ScaffoldMessenger.maybeOf(context);
       messenger?.hideCurrentSnackBar();
-      messenger?.showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      messenger?.showSnackBar(SnackBar(content: Text(error.message)));
     } catch (error) {
       if (!mounted) {
         return;
@@ -205,6 +218,17 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
         child: Consumer<HomeViewModel>(
           builder: (context, homeVM, _) {
             final dashboard = homeVM.dashboard;
+            final dashboardYear = dashboard?.year ?? _selectedYear;
+            if (dashboardYear != _selectedYear) {
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (!mounted) {
+                  return;
+                }
+                setState(() {
+                  _selectedYear = dashboardYear;
+                });
+              });
+            }
             final weekStats = _buildWeekStats(dashboard);
             final selectedStat = weekStats[_selectedDayIndex];
             final minuteGoal = _buildTodayGoal(dashboard);
@@ -213,7 +237,7 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
             final chartData = _buildChartData(dashboard, _selectedChartRange);
             return RefreshIndicator(
               color: AppColors.primary,
-              onRefresh: homeVM.loadDashboard,
+              onRefresh: () => homeVM.loadDashboard(year: _selectedYear),
               child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
@@ -238,14 +262,10 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
                         _WeekStrip(
                           stats: weekStats,
                           selectedIndex: _selectedDayIndex,
-                          onSelected: (index) {
-                            setState(() {
-                              _selectedDayIndex = index;
-                            });
-                          },
                         ),
                         const SizedBox(height: 28),
                         _ReadingTimeChartCard(
+                          year: dashboardYear,
                           chartData: chartData,
                           selectedRange: _selectedChartRange,
                           onRangeChanged: (range) {
@@ -253,12 +273,16 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
                               _selectedChartRange = range;
                             });
                           },
+                          onPreviousYear: () => _changeYear(dashboardYear - 1),
+                          onNextYear: dashboardYear < DateTime.now().year
+                              ? () => _changeYear(dashboardYear + 1)
+                              : null,
                         ),
                         const SizedBox(height: 28),
                         _YearReadingCard(overview: overview),
                         const SizedBox(height: 28),
                         _YearlyOverviewCard(
-                          year: dashboard?.year ?? DateTime.now().year,
+                          year: dashboardYear,
                           finishedCount:
                               dashboard?.statistics?.year.booksFinished ?? 0,
                           yearlyGoal: yearlyGoal,
@@ -266,7 +290,7 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
                               dashboard?.currentReading.length ?? 0,
                           onEditGoal: () => _editYearlyGoal(
                             initialGoal: yearlyGoal,
-                            year: dashboard?.year ?? DateTime.now().year,
+                            year: dashboardYear,
                           ),
                           highlightedBook:
                               dashboard?.finishedInYear.isNotEmpty == true
@@ -716,14 +740,20 @@ class _StreakStatCard extends StatelessWidget {
 
 class _ReadingTimeChartCard extends StatelessWidget {
   const _ReadingTimeChartCard({
+    required this.year,
     required this.chartData,
     required this.selectedRange,
     required this.onRangeChanged,
+    required this.onPreviousYear,
+    required this.onNextYear,
   });
 
+  final int year;
   final _ChartData chartData;
   final _ChartRange selectedRange;
   final ValueChanged<_ChartRange> onRangeChanged;
+  final VoidCallback onPreviousYear;
+  final VoidCallback? onNextYear;
 
   @override
   Widget build(BuildContext context) {
@@ -749,45 +779,84 @@ class _ReadingTimeChartCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Reading time',
-            style: TextStyle(
-              color: AppColors.darkBlue,
-              fontSize: 22,
-              fontWeight: FontWeight.w800,
-            ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isCompact = constraints.maxWidth < 320;
+              final title = const Text(
+                'Reading time',
+                style: TextStyle(
+                  color: AppColors.darkBlue,
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                ),
+              );
+              final yearStepper = _YearStepper(
+                year: year,
+                onPrevious: onPreviousYear,
+                onNext: onNextYear,
+                compact: isCompact,
+              );
+
+              if (isCompact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [title, const SizedBox(height: 12), yearStepper],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(child: title),
+                  yearStepper,
+                ],
+              );
+            },
           ),
           const SizedBox(height: 18),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Column(
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isCompact = constraints.maxWidth < 320;
+              final summary = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     '$totalMinutes',
                     style: const TextStyle(
-                      color: AppColors.darkBlue,
+                      color: AppColors.secondary,
                       fontSize: 38,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   Text(
-                    'minutes ${selectedRange == _ChartRange.week ? 'this week' : 'this month'}',
+                    selectedRange == _ChartRange.week
+                        ? 'mins this week'
+                        : 'mins this month',
                     style: TextStyle(
                       color: AppColors.darkBrown.withValues(alpha: 0.68),
-                      fontSize: 15,
+                      fontSize: 14,
                       fontWeight: FontWeight.w700,
                     ),
                   ),
                 ],
-              ),
-              const Spacer(),
-              _ChartRangeSwitch(
+              );
+              final rangeSwitch = _ChartRangeSwitch(
                 selectedRange: selectedRange,
                 onChanged: onRangeChanged,
-              ),
-            ],
+                compact: isCompact,
+              );
+
+              if (isCompact) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [summary, const SizedBox(height: 14), rangeSwitch],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [summary, const Spacer(), rangeSwitch],
+              );
+            },
           ),
           const SizedBox(height: 20),
           SizedBox(height: 220, child: _LineChart(points: chartData.points)),
@@ -797,22 +866,114 @@ class _ReadingTimeChartCard extends StatelessWidget {
   }
 }
 
-class _ChartRangeSwitch extends StatelessWidget {
-  const _ChartRangeSwitch({
-    required this.selectedRange,
-    required this.onChanged,
+class _YearStepper extends StatelessWidget {
+  const _YearStepper({
+    required this.year,
+    required this.onPrevious,
+    required this.onNext,
+    this.compact = false,
   });
 
-  final _ChartRange selectedRange;
-  final ValueChanged<_ChartRange> onChanged;
+  final int year;
+  final VoidCallback onPrevious;
+  final VoidCallback? onNext;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(4),
+      padding: EdgeInsets.symmetric(
+        horizontal: compact ? 4 : 6,
+        vertical: compact ? 2 : 4,
+      ),
       decoration: BoxDecoration(
         color: AppColors.cream,
         borderRadius: BorderRadius.circular(18),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _YearArrowButton(
+            icon: Icons.chevron_left_rounded,
+            onTap: onPrevious,
+            compact: compact,
+          ),
+          Padding(
+            padding: EdgeInsets.symmetric(horizontal: compact ? 4 : 8),
+            child: Text(
+              '$year',
+              style: TextStyle(
+                color: AppColors.darkBlue,
+                fontWeight: FontWeight.w800,
+                fontSize: compact ? 15 : null,
+              ),
+            ),
+          ),
+          _YearArrowButton(
+            icon: Icons.chevron_right_rounded,
+            onTap: onNext,
+            compact: compact,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _YearArrowButton extends StatelessWidget {
+  const _YearArrowButton({
+    required this.icon,
+    required this.onTap,
+    this.compact = false,
+  });
+
+  final IconData icon;
+  final VoidCallback? onTap;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final isEnabled = onTap != null;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: onTap,
+        child: Padding(
+          padding: EdgeInsets.all(compact ? 2 : 4),
+          child: Icon(
+            icon,
+            size: compact ? 16 : 18,
+            color: isEnabled
+                ? AppColors.darkBrown
+                : AppColors.darkBrown.withValues(alpha: 0.28),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _ChartRangeSwitch extends StatelessWidget {
+  const _ChartRangeSwitch({
+    required this.selectedRange,
+    required this.onChanged,
+    this.compact = false,
+  });
+
+  final _ChartRange selectedRange;
+  final ValueChanged<_ChartRange> onChanged;
+  final bool compact;
+
+  @override
+  Widget build(BuildContext context) {
+    final chipWidth = compact ? 50.0 : 58.0;
+
+    return Container(
+      padding: EdgeInsets.all(compact ? 2 : 3),
+      decoration: BoxDecoration(
+        color: AppColors.cream,
+        borderRadius: BorderRadius.circular(compact ? 14 : 16),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -821,11 +982,15 @@ class _ChartRangeSwitch extends StatelessWidget {
             label: 'Week',
             isSelected: selectedRange == _ChartRange.week,
             onTap: () => onChanged(_ChartRange.week),
+            compact: compact,
+            width: chipWidth,
           ),
           _ChartRangeChip(
             label: 'Month',
             isSelected: selectedRange == _ChartRange.month,
             onTap: () => onChanged(_ChartRange.month),
+            compact: compact,
+            width: chipWidth,
           ),
         ],
       ),
@@ -838,11 +1003,15 @@ class _ChartRangeChip extends StatelessWidget {
     required this.label,
     required this.isSelected,
     required this.onTap,
+    required this.width,
+    this.compact = false,
   });
 
   final String label;
   final bool isSelected;
   final VoidCallback onTap;
+  final double width;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -850,16 +1019,22 @@ class _ChartRangeChip extends StatelessWidget {
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        width: width,
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 4 : 6,
+          vertical: compact ? 5 : 6,
+        ),
         decoration: BoxDecoration(
           color: isSelected ? Colors.white : Colors.transparent,
-          borderRadius: BorderRadius.circular(14),
+          borderRadius: BorderRadius.circular(compact ? 10 : 12),
         ),
         child: Text(
           label,
+          textAlign: TextAlign.center,
           style: TextStyle(
             color: AppColors.darkBlue,
             fontWeight: FontWeight.w800,
+            fontSize: compact ? 13 : 14,
           ),
         ),
       ),
@@ -926,15 +1101,10 @@ class _LineChart extends StatelessWidget {
 }
 
 class _WeekStrip extends StatelessWidget {
-  const _WeekStrip({
-    required this.stats,
-    required this.selectedIndex,
-    required this.onSelected,
-  });
+  const _WeekStrip({required this.stats, required this.selectedIndex});
 
   final List<_DayStat> stats;
   final int selectedIndex;
-  final ValueChanged<int> onSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -968,65 +1138,54 @@ class _WeekStrip extends StatelessWidget {
               return Expanded(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 3),
-                  child: Material(
-                    color: Colors.transparent,
-                    child: InkWell(
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 220),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? AppColors.primary.withValues(alpha: 0.16)
+                          : Colors.transparent,
                       borderRadius: BorderRadius.circular(22),
-                      onTap: () => onSelected(index),
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 220),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        decoration: BoxDecoration(
-                          color: isSelected
-                              ? AppColors.primary.withValues(alpha: 0.16)
-                              : Colors.transparent,
-                          borderRadius: BorderRadius.circular(22),
-                          border: isSelected
-                              ? Border.all(color: AppColors.primary, width: 1.2)
-                              : null,
+                      border: isSelected
+                          ? Border.all(color: AppColors.primary, width: 1.2)
+                          : null,
+                    ),
+                    child: Column(
+                      children: [
+                        Text(
+                          item.shortLabel,
+                          style: TextStyle(
+                            color: isSelected
+                                ? AppColors.primary
+                                : AppColors.darkBrown.withValues(alpha: 0.72),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
                         ),
-                        child: Column(
-                          children: [
-                            Text(
-                              item.shortLabel,
-                              style: TextStyle(
-                                color: isSelected
-                                    ? AppColors.primary
-                                    : AppColors.darkBrown.withValues(
-                                        alpha: 0.72,
-                                      ),
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
+                        const SizedBox(height: 10),
+                        Container(
+                          width: 42,
+                          height: 42,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? Colors.white
+                                : hasRead
+                                ? AppColors.secondary.withValues(alpha: 0.18)
+                                : AppColors.cream,
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '${item.dayOfMonth}',
+                            style: TextStyle(
+                              color: hasRead && !isSelected
+                                  ? AppColors.secondary
+                                  : AppColors.darkBlue,
+                              fontWeight: FontWeight.w800,
                             ),
-                            const SizedBox(height: 10),
-                            Container(
-                              width: 42,
-                              height: 42,
-                              alignment: Alignment.center,
-                              decoration: BoxDecoration(
-                                color: isSelected
-                                    ? Colors.white
-                                    : hasRead
-                                    ? AppColors.secondary.withValues(
-                                        alpha: 0.18,
-                                      )
-                                    : AppColors.cream,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Text(
-                                '${item.dayOfMonth}',
-                                style: TextStyle(
-                                  color: hasRead && !isSelected
-                                      ? AppColors.secondary
-                                      : AppColors.darkBlue,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            ),
-                          ],
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ),
                 ),
@@ -1074,43 +1233,43 @@ class _YearlyOverviewCard extends StatelessWidget {
           ),
         ],
       ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                const Expanded(
-                  child: Text(
-                    'My yearly goal',
-                    style: TextStyle(
-                      color: AppColors.darkBlue,
-                      fontSize: 22,
-                      fontWeight: FontWeight.w800,
-                    ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Expanded(
+                child: Text(
+                  'My yearly goal',
+                  style: TextStyle(
+                    color: AppColors.darkBlue,
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
                   ),
                 ),
-                SizedBox(
-                  width: 34,
-                  height: 34,
-                  child: Material(
-                    color: AppColors.cream,
+              ),
+              SizedBox(
+                width: 34,
+                height: 34,
+                child: Material(
+                  color: AppColors.cream,
+                  borderRadius: BorderRadius.circular(12),
+                  child: InkWell(
                     borderRadius: BorderRadius.circular(12),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(12),
-                      onTap: onEditGoal,
-                      child: const Icon(
-                        Icons.edit_rounded,
-                        size: 18,
-                        color: AppColors.darkBrown,
-                      ),
+                    onTap: onEditGoal,
+                    child: const Icon(
+                      Icons.edit_rounded,
+                      size: 18,
+                      color: AppColors.darkBrown,
                     ),
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Row(
-              children: [
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Row(
+            children: [
               SizedBox(
                 width: 128,
                 height: 128,

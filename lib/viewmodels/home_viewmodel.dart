@@ -5,11 +5,8 @@ import '../data/models/home_dashboard_model.dart';
 import '../data/models/user_model.dart';
 
 class HomeViewModel extends ChangeNotifier {
-  HomeViewModel({
-    required this.user,
-    this.token,
-    ApiService? apiService,
-  }) : _apiService = apiService ?? ApiService();
+  HomeViewModel({required this.user, this.token, ApiService? apiService})
+    : _apiService = apiService ?? ApiService();
 
   final ApiService _apiService;
   final UserModel user;
@@ -18,23 +15,28 @@ class HomeViewModel extends ChangeNotifier {
   HomeDashboardModel? dashboard;
   bool isLoading = false;
   String? errorMessage;
+  int? _loadedYear;
 
-  Future<void> loadDashboard() async {
+  Future<void> loadDashboard({int? year}) async {
     isLoading = true;
     errorMessage = null;
     notifyListeners();
 
     try {
+      final resolvedYear = year ?? _loadedYear;
+      final query = resolvedYear == null ? '' : '?year=$resolvedYear';
       final result = await _apiService.get(
-        '/home/${user.id}/dashboard',
+        '/home/${user.id}/dashboard$query',
         headers: token == null ? null : {'Authorization': 'Bearer $token'},
       );
 
       if (result['success'] == true) {
         final data = result['data'] as Map<String, dynamic>? ?? {};
         dashboard = HomeDashboardModel.fromJson(data);
+        _loadedYear = dashboard?.year ?? resolvedYear;
       } else {
-        errorMessage = result['message'] as String? ?? 'Failed to load homepage';
+        errorMessage =
+            result['message'] as String? ?? 'Failed to load homepage';
       }
     } catch (_) {
       errorMessage = 'Could not load homepage data';
@@ -48,10 +50,7 @@ class HomeViewModel extends ChangeNotifier {
     try {
       final result = await _apiService.post(
         '/home/${user.id}/goals/yearly',
-        {
-          'target_value': targetValue,
-          'year': year,
-        },
+        {'target_value': targetValue, 'year': year},
         headers: token == null ? null : {'Authorization': 'Bearer $token'},
       );
 
@@ -63,7 +62,7 @@ class HomeViewModel extends ChangeNotifier {
 
       errorMessage = null;
       dashboard = _applyYearlyGoalUpdate(dashboard, targetValue);
-      await loadDashboard();
+      await loadDashboard(year: year ?? _loadedYear ?? dashboard?.year);
     } on ApiException {
       rethrow;
     } catch (error) {
@@ -91,10 +90,7 @@ class HomeViewModel extends ChangeNotifier {
       finishedInYear: current.finishedInYear,
       year: current.year,
       goals: currentGoals == null
-          ? DashboardGoals(
-              yearlyBooks: targetValue,
-              monthlyHours: 0,
-            )
+          ? DashboardGoals(yearlyBooks: targetValue, monthlyHours: 0)
           : DashboardGoals(
               yearlyBooks: targetValue,
               monthlyHours: currentGoals.monthlyHours,

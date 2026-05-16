@@ -18,12 +18,14 @@ class ManualAddBookPage extends StatelessWidget {
     this.token,
     this.initialMode = AddBookMode.manual,
     this.initialBook,
+    this.initialSearchResult,
   });
 
   final UserModel user;
   final String? token;
   final AddBookMode initialMode;
   final BookDetailModel? initialBook;
+  final GoogleBookSearchResult? initialSearchResult;
 
   @override
   Widget build(BuildContext context) {
@@ -32,6 +34,7 @@ class ManualAddBookPage extends StatelessWidget {
       child: _ManualAddBookView(
         initialMode: initialMode,
         initialBook: initialBook,
+        initialSearchResult: initialSearchResult,
       ),
     );
   }
@@ -41,10 +44,12 @@ class _ManualAddBookView extends StatefulWidget {
   const _ManualAddBookView({
     required this.initialMode,
     required this.initialBook,
+    required this.initialSearchResult,
   });
 
   final AddBookMode initialMode;
   final BookDetailModel? initialBook;
+  final GoogleBookSearchResult? initialSearchResult;
 
   @override
   State<_ManualAddBookView> createState() => _ManualAddBookViewState();
@@ -61,7 +66,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
   final _finishDateController = TextEditingController();
   final _onlineSearchController = TextEditingController();
 
-  late AddBookMode _selectedMode;
   String _selectedStatus = 'plan_to_read';
   int? _selectedRating;
   XFile? _selectedCoverImage;
@@ -77,10 +81,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
   @override
   void initState() {
     super.initState();
-    _selectedMode = widget.initialBook == null
-        ? widget.initialMode
-        : AddBookMode.manual;
-
     final initialBook = widget.initialBook;
     if (initialBook != null) {
       _titleController.text = initialBook.title;
@@ -92,6 +92,14 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
       _selectedStatus = initialBook.status;
       _selectedRating = initialBook.rating;
       _selectedOnlineCoverUrl = initialBook.coverImageUrl;
+      return;
+    }
+
+    final initialSearchResult = widget.initialSearchResult;
+    if (initialSearchResult != null) {
+      _titleController.text = initialSearchResult.title;
+      _authorController.text = initialSearchResult.authors.join(', ');
+      _selectedOnlineCoverUrl = initialSearchResult.thumbnailUrl;
     }
   }
 
@@ -150,18 +158,16 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
     });
   }
 
-  void _applyOnlineBook(GoogleBookSearchResult book) {
-    setState(() {
-      _titleController.text = book.title;
-      _authorController.text = book.authors.join(', ');
-      _selectedOnlineCoverUrl = book.thumbnailUrl?.replaceFirst('http://', 'https://');
-      _selectedCoverImage = null;
-      _selectedMode = AddBookMode.manual;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Da chon "${book.title}" va dien san thong tin vao form.'),
+  Future<void> _openManualFromSearch(GoogleBookSearchResult book) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ManualAddBookPage(
+          user: context.read<ManualAddBookViewModel>().user,
+          token: context.read<ManualAddBookViewModel>().token,
+          initialMode: AddBookMode.manual,
+          initialSearchResult: book,
+        ),
       ),
     );
   }
@@ -226,6 +232,10 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
     return Consumer<ManualAddBookViewModel>(
       builder: (context, viewModel, _) {
         final isEditing = widget.initialBook != null;
+        final isSearchOnly =
+            !isEditing &&
+            widget.initialSearchResult == null &&
+            widget.initialMode == AddBookMode.searchOnline;
         return Scaffold(
           backgroundColor: AppColors.cream,
           body: SafeArea(
@@ -240,12 +250,13 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                         onTap: () => Navigator.pop(context),
                       ),
                       const Spacer(),
-                      _TopIconButton(
-                        icon: isEditing ? Icons.check_rounded : Icons.add_rounded,
-                        onTap: viewModel.isSubmitting
-                            ? null
-                            : () => _submit(viewModel),
-                      ),
+                      if (!isSearchOnly)
+                        _TopIconButton(
+                          icon: isEditing ? Icons.check_rounded : Icons.add_rounded,
+                          onTap: viewModel.isSubmitting
+                              ? null
+                              : () => _submit(viewModel),
+                        ),
                     ],
                   ),
                 ),
@@ -257,166 +268,156 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (!isEditing)
-                            _ModeSwitcher(
-                              selectedMode: _selectedMode,
-                              onChanged: (mode) {
-                                setState(() {
-                                  _selectedMode = mode;
-                                });
-                              },
-                            ),
-                          if (!isEditing && _selectedMode == AddBookMode.searchOnline) ...[
-                            const SizedBox(height: 22),
+                          if (isSearchOnly) ...[
+                            const SizedBox(height: 12),
                             _OnlineSearchSection(
                               controller: _onlineSearchController,
                               viewModel: viewModel,
-                              onBookSelected: _applyOnlineBook,
+                              onBookSelected: _openManualFromSearch,
+                            ),
+                          ] else ...[
+                            const SizedBox(height: 10),
+                            Center(
+                              child: GestureDetector(
+                                onTap: viewModel.isSubmitting ? null : _pickCoverImage,
+                                child: Container(
+                                  width: 120,
+                                  height: 150,
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(28),
+                                    border: Border.all(
+                                      color: AppColors.primary.withValues(
+                                        alpha: 0.2,
+                                      ),
+                                    ),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: AppColors.primary.withValues(
+                                          alpha: 0.10,
+                                        ),
+                                        blurRadius: 24,
+                                        offset: const Offset(0, 14),
+                                      ),
+                                    ],
+                                  ),
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(28),
+                                    child: _buildCoverPreview(viewModel),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Center(
+                              child: TextButton.icon(
+                                onPressed: viewModel.isSubmitting ? null : _pickCoverImage,
+                                icon: const Icon(Icons.photo_library_rounded),
+                                label: Text(
+                                  _selectedCoverImage == null
+                                      ? _selectedOnlineCoverUrl == null
+                                          ? 'Choose cover from gallery'
+                                          : 'Replace online cover'
+                                      : 'Change cover',
+                                ),
+                              ),
                             ),
                             const SizedBox(height: 28),
-                          ] else
-                            const SizedBox(height: 10),
-                          Center(
-                            child: GestureDetector(
-                              onTap: viewModel.isSubmitting ? null : _pickCoverImage,
-                              child: Container(
-                                width: 120,
-                                height: 150,
-                                decoration: BoxDecoration(
-                                  color: Colors.white,
-                                  borderRadius: BorderRadius.circular(28),
-                                  border: Border.all(
-                                    color: AppColors.primary.withValues(
-                                      alpha: 0.2,
+                            const _FieldLabel('Title *'),
+                            _BookTextField(
+                              controller: _titleController,
+                              hintText: 'Enter book title',
+                              validator: (value) {
+                                if ((value ?? '').trim().isEmpty) {
+                                  return 'Title is required';
+                                }
+                                return null;
+                              },
+                            ),
+                            const SizedBox(height: 18),
+                            const _FieldLabel('Author'),
+                            _BookTextField(
+                              controller: _authorController,
+                              hintText: 'Enter author name',
+                            ),
+                            const SizedBox(height: 18),
+                            const _FieldLabel('Status'),
+                            _BookDropdownField<String>(
+                              initialValue: _selectedStatus,
+                              items: _statusOptions
+                                  .map(
+                                    (option) => DropdownMenuItem<String>(
+                                      value: option.value,
+                                      child: Text(option.label),
+                                    ),
+                                  )
+                                  .toList(),
+                              onChanged: (value) {
+                                if (value == null) return;
+                                setState(() {
+                                  _selectedStatus = value;
+                                });
+                              },
+                            ),
+                            const SizedBox(height: 18),
+                            const _FieldLabel('Rating'),
+                            _BookDropdownField<int?>(
+                              initialValue: _selectedRating,
+                              hint: 'Select rating',
+                              items: [
+                                const DropdownMenuItem<int?>(
+                                  value: null,
+                                  child: Text('No rating'),
+                                ),
+                                ...List.generate(
+                                  5,
+                                  (index) => DropdownMenuItem<int?>(
+                                    value: index + 1,
+                                    child: Text(
+                                      '${index + 1} star${index == 0 ? '' : 's'}',
                                     ),
                                   ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: AppColors.primary.withValues(
-                                        alpha: 0.10,
-                                      ),
-                                      blurRadius: 24,
-                                      offset: const Offset(0, 14),
-                                    ),
-                                  ],
                                 ),
-                                child: ClipRRect(
-                                  borderRadius: BorderRadius.circular(28),
-                                  child: _buildCoverPreview(viewModel),
-                                ),
-                              ),
+                              ],
+                              onChanged: (value) {
+                                setState(() {
+                                  _selectedRating = value;
+                                });
+                              },
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          Center(
-                            child: TextButton.icon(
-                              onPressed: viewModel.isSubmitting ? null : _pickCoverImage,
-                              icon: const Icon(Icons.photo_library_rounded),
-                              label: Text(
-                                _selectedCoverImage == null
-                                    ? _selectedOnlineCoverUrl == null
-                                        ? 'Choose cover from gallery'
-                                        : 'Replace online cover'
-                                    : 'Change cover',
-                              ),
+                            const SizedBox(height: 18),
+                            const _FieldLabel('Reading Year'),
+                            _BookTextField(
+                              controller: _readingYearController,
+                              hintText: 'e.g. 2026',
+                              keyboardType: TextInputType.number,
                             ),
-                          ),
-                          const SizedBox(height: 28),
-                          const _FieldLabel('Title *'),
-                          _BookTextField(
-                            controller: _titleController,
-                            hintText: 'Enter book title',
-                            validator: (value) {
-                              if ((value ?? '').trim().isEmpty) {
-                                return 'Title is required';
-                              }
-                              return null;
-                            },
-                          ),
-                          const SizedBox(height: 18),
-                          const _FieldLabel('Author'),
-                          _BookTextField(
-                            controller: _authorController,
-                            hintText: 'Enter author name',
-                          ),
-                          const SizedBox(height: 18),
-                          const _FieldLabel('Status'),
-                          _BookDropdownField<String>(
-                            initialValue: _selectedStatus,
-                            items: _statusOptions
-                                .map(
-                                  (option) => DropdownMenuItem<String>(
-                                    value: option.value,
-                                    child: Text(option.label),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (value) {
-                              if (value == null) return;
-                              setState(() {
-                                _selectedStatus = value;
-                              });
-                            },
-                          ),
-                          const SizedBox(height: 18),
-                          const _FieldLabel('Rating'),
-                          _BookDropdownField<int?>(
-                            initialValue: _selectedRating,
-                            hint: 'Select rating',
-                            items: [
-                              const DropdownMenuItem<int?>(
-                                value: null,
-                                child: Text('No rating'),
-                              ),
-                              ...List.generate(
-                                5,
-                                (index) => DropdownMenuItem<int?>(
-                                  value: index + 1,
-                                  child: Text(
-                                    '${index + 1} star${index == 0 ? '' : 's'}',
-                                  ),
-                                ),
-                              ),
-                            ],
-                            onChanged: (value) {
-                              setState(() {
-                                _selectedRating = value;
-                              });
-                            },
-                          ),
-
-                          const SizedBox(height: 18),
-                          const _FieldLabel('Reading Year'),
-                          _BookTextField(
-                            controller: _readingYearController,
-                            hintText: 'e.g. 2026',
-                            keyboardType: TextInputType.number,
-                          ),
-                          const SizedBox(height: 18),
-                          const _FieldLabel('Start Date'),
-                          _BookTextField(
-                            controller: _startDateController,
-                            hintText: 'YYYY-MM-DD',
-                            readOnly: true,
-                            onTap: () => _pickDate(_startDateController),
-                            suffixIcon: Icons.calendar_month_rounded,
-                          ),
-                          const SizedBox(height: 18),
-                          const _FieldLabel('Finish Date'),
-                          _BookTextField(
-                            controller: _finishDateController,
-                            hintText: 'YYYY-MM-DD',
-                            readOnly: true,
-                            onTap: () => _pickDate(_finishDateController),
-                            suffixIcon: Icons.calendar_month_rounded,
-                          ),
-                          const SizedBox(height: 18),
-                          const _FieldLabel('Note'),
-                          _BookTextField(
-                            controller: _noteController,
-                            hintText: 'Add your notes',
-                            maxLines: 4,
-                          ),
+                            const SizedBox(height: 18),
+                            const _FieldLabel('Start Date'),
+                            _BookTextField(
+                              controller: _startDateController,
+                              hintText: 'YYYY-MM-DD',
+                              readOnly: true,
+                              onTap: () => _pickDate(_startDateController),
+                              suffixIcon: Icons.calendar_month_rounded,
+                            ),
+                            const SizedBox(height: 18),
+                            const _FieldLabel('Finish Date'),
+                            _BookTextField(
+                              controller: _finishDateController,
+                              hintText: 'YYYY-MM-DD',
+                              readOnly: true,
+                              onTap: () => _pickDate(_finishDateController),
+                              suffixIcon: Icons.calendar_month_rounded,
+                            ),
+                            const SizedBox(height: 18),
+                            const _FieldLabel('Note'),
+                            _BookTextField(
+                              controller: _noteController,
+                              hintText: 'Add your notes',
+                              maxLines: 4,
+                            ),
+                          ],
                           if (viewModel.errorMessage != null) ...[
                             const SizedBox(height: 18),
                             Text(
@@ -427,44 +428,59 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                               ),
                             ),
                           ],
-                          const SizedBox(height: 24),
-                          SizedBox(
-                            width: double.infinity,
-                            child: ElevatedButton(
-                              onPressed: viewModel.isSubmitting
-                                  ? null
-                                  : () => _submit(viewModel),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.primary,
-                                foregroundColor: Colors.white,
-                                disabledBackgroundColor: AppColors.primary
-                                    .withValues(alpha: 0.5),
-                                padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
+                          if (!isSearchOnly) ...[
+                            const SizedBox(height: 24),
+                            SizedBox(
+                              width: double.infinity,
+                              child: ElevatedButton(
+                                onPressed: viewModel.isSubmitting
+                                    ? null
+                                    : () => _submit(viewModel),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.primary,
+                                  foregroundColor: Colors.white,
+                                  disabledBackgroundColor: AppColors.primary
+                                      .withValues(alpha: 0.5),
+                                  padding: const EdgeInsets.symmetric(
+                                    vertical: 16,
+                                  ),
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  elevation: 0,
                                 ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(20),
-                                ),
-                                elevation: 0,
+                                child: viewModel.isSubmitting
+                                    ? const SizedBox(
+                                        width: 22,
+                                        height: 22,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2.4,
+                                          color: Colors.white,
+                                        ),
+                                      )
+                                    : Text(
+                                        isEditing ? 'Save Changes' : 'Create Book',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
                               ),
-                              child: viewModel.isSubmitting
-                                  ? const SizedBox(
-                                      width: 22,
-                                      height: 22,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.4,
-                                        color: Colors.white,
-                                      ),
-                                    )
-                                  : Text(
-                                      isEditing ? 'Save Changes' : 'Create Book',
-                                      style: TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.w800,
-                                      ),
-                                    ),
                             ),
-                          ),
+                          ],
+                          if (isSearchOnly) ...[
+                            const SizedBox(height: 20),
+                            Text(
+                              'Tap a result to open the manual form with book information filled in.',
+                              style: TextStyle(
+                                color: AppColors.darkBrown.withValues(alpha: 0.72),
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                height: 1.4,
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                          ],
                         ],
                       ),
                     ),
@@ -582,88 +598,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
   }
 }
 
-class _ModeSwitcher extends StatelessWidget {
-  const _ModeSwitcher({
-    required this.selectedMode,
-    required this.onChanged,
-  });
-
-  final AddBookMode selectedMode;
-  final ValueChanged<AddBookMode> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(6),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withValues(alpha: 0.08),
-            blurRadius: 16,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: _ModeChip(
-              label: 'Manual',
-              isSelected: selectedMode == AddBookMode.manual,
-              onTap: () => onChanged(AddBookMode.manual),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: _ModeChip(
-              label: 'Search online',
-              isSelected: selectedMode == AddBookMode.searchOnline,
-              onTap: () => onChanged(AddBookMode.searchOnline),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ModeChip extends StatelessWidget {
-  const _ModeChip({
-    required this.label,
-    required this.isSelected,
-    required this.onTap,
-  });
-
-  final String label;
-  final bool isSelected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-        decoration: BoxDecoration(
-          color: isSelected ? AppColors.primary : Colors.transparent,
-          borderRadius: BorderRadius.circular(18),
-        ),
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: TextStyle(
-            color: isSelected ? Colors.white : AppColors.darkBlue,
-            fontWeight: FontWeight.w800,
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _OnlineSearchSection extends StatelessWidget {
   const _OnlineSearchSection({
     required this.controller,
@@ -680,7 +614,17 @@ class _OnlineSearchSection extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const _FieldLabel('Search from Google Books'),
+        const Padding(
+          padding: EdgeInsets.only(left: 4, bottom: 12),
+          child: Text(
+            'Search from Google Books',
+            style: TextStyle(
+              color: AppColors.darkBlue,
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ),
         Row(
           children: [
             Expanded(
@@ -718,15 +662,6 @@ class _OnlineSearchSection extends StatelessWidget {
               ),
             ),
           ],
-        ),
-        const SizedBox(height: 12),
-        Text(
-          'Ket qua lien quan se duoc lay tu Google Books API.',
-          style: TextStyle(
-            color: AppColors.darkBrown.withValues(alpha: 0.72),
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
         ),
         if (viewModel.searchErrorMessage != null) ...[
           const SizedBox(height: 12),
@@ -855,6 +790,17 @@ class _OnlineBookCard extends StatelessWidget {
                           color: AppColors.darkBrown.withValues(alpha: 0.70),
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    if (book.isbn != null && book.isbn!.trim().isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      Text(
+                        'ISBN: ${book.isbn}',
+                        style: TextStyle(
+                          color: AppColors.darkBrown.withValues(alpha: 0.7),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
                     ],

@@ -3,6 +3,7 @@ class GoogleBookSearchResult {
     required this.id,
     required this.title,
     required this.authors,
+    this.isbn,
     this.thumbnailUrl,
     this.publishedDate,
     this.description,
@@ -11,6 +12,7 @@ class GoogleBookSearchResult {
   final String id;
   final String title;
   final List<String> authors;
+  final String? isbn;
   final String? thumbnailUrl;
   final String? publishedDate;
   final String? description;
@@ -44,6 +46,7 @@ class GoogleBookSearchResult {
       authors: rawAuthors is List
           ? rawAuthors.whereType<String>().toList()
           : const <String>[],
+      isbn: volumeInfo['isbn'] as String?,
       thumbnailUrl: thumbnailUrl,
       publishedDate: volumeInfo['publishedDate'] as String?,
       description: volumeInfo['description'] as String?,

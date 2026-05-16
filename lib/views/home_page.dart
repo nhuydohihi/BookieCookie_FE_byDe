@@ -2,10 +2,12 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants/app_colors.dart';
+import '../data/models/google_book_search_result.dart';
 import '../data/models/home_dashboard_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/home_viewmodel.dart';
 import 'account_page.dart';
+import 'barcode_scan_page.dart';
 import 'book_detail_page.dart';
 import 'challenge_page.dart';
 import 'library_page.dart';
@@ -71,11 +73,32 @@ class _HomePageView extends StatelessWidget {
         }
         break;
       case AddBookAction.scanIsbn:
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Tính năng quét ISBN đang được phát triển.'),
+        final GoogleBookSearchResult? scannedBook =
+            await Navigator.push<GoogleBookSearchResult>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => BarcodeScanPage(user: user, token: token),
           ),
         );
+        if (!context.mounted || scannedBook == null) {
+          break;
+        }
+
+        final created = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ManualAddBookPage(
+              user: user,
+              token: token,
+              initialMode: AddBookMode.manual,
+              initialSearchResult: scannedBook,
+            ),
+          ),
+        );
+
+        if (created == true) {
+          await homeVM.loadDashboard();
+        }
         break;
     }
   }

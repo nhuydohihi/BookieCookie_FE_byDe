@@ -28,6 +28,8 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Cho phép chọn ảnh từ thư viện để làm ảnh bìa sách.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Cho phép dùng camera để quét mã vạch ISBN của sách.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
