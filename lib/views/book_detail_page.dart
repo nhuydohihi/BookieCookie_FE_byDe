@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 
 import '../core/constants/app_colors.dart';
 import '../data/models/book_detail_model.dart';
-import '../data/models/book_quote_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/book_detail_viewmodel.dart';
 import 'manual_add_book_page.dart';
@@ -45,6 +44,8 @@ class _BookDetailView extends StatefulWidget {
 
 class _BookDetailViewState extends State<_BookDetailView> {
   bool _didChange = false;
+  bool _showAllQuotes = false;
+  bool _showAllNotes = false;
 
   Future<void> _openEdit(
     BuildContext context,
@@ -87,7 +88,6 @@ class _BookDetailViewState extends State<_BookDetailView> {
             title: detail?.title,
             author: detail?.author,
             coverImageUrl: detail?.coverImageUrl,
-            initialNote: detail?.note,
             userId: widget.user.id,
             userBookId: detail?.id ?? viewModel.userBookId,
             token: widget.token,
@@ -142,7 +142,7 @@ class _BookDetailViewState extends State<_BookDetailView> {
     final detail = viewModel.detail;
     if (detail == null) return;
 
-    final controller = TextEditingController(text: detail.note ?? '');
+    final controller = TextEditingController();
 
     final saved = await showModalBottomSheet<bool>(
       context: context,
@@ -157,8 +157,7 @@ class _BookDetailViewState extends State<_BookDetailView> {
           ),
           child: StatefulBuilder(
             builder: (context, setSheetState) {
-              final hasChanged =
-                  controller.text.trim() != (detail.note ?? '').trim();
+              final hasChanged = controller.text.trim().isNotEmpty;
 
               return Container(
                 padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
@@ -264,65 +263,6 @@ class _BookDetailViewState extends State<_BookDetailView> {
     }
   }
 
-  Future<void> _showAllQuotes(
-    BuildContext context,
-    List<BookQuoteModel> quotes,
-  ) async {
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) => Container(
-        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Tất cả quote',
-              style: TextStyle(
-                color: AppColors.darkBlue,
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-              ),
-            ),
-            const SizedBox(height: 16),
-            Flexible(
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: quotes.length,
-                separatorBuilder: (context, index) =>
-                    const SizedBox(height: 12),
-                itemBuilder: (context, index) {
-                  final quote = quotes[index];
-                  return Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFF7F7FB),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      quote.content,
-                      style: TextStyle(
-                        color: AppColors.darkBrown.withValues(alpha: 0.86),
-                        fontWeight: FontWeight.w600,
-                        height: 1.5,
-                      ),
-                    ),
-                  );
-                },
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   void _handleBack() {
     Navigator.pop(context, _didChange);
   }
@@ -364,8 +304,8 @@ class _BookDetailViewState extends State<_BookDetailView> {
               }
 
               final detail = viewModel.detail;
+              final notes = viewModel.notes;
               final quotes = viewModel.quotes;
-              final latestQuote = quotes.isEmpty ? null : quotes.first;
               if (detail == null) {
                 return const SizedBox.shrink();
               }
@@ -458,12 +398,18 @@ class _BookDetailViewState extends State<_BookDetailView> {
                       title: 'Quote',
                       icon: Icons.format_quote_rounded,
                       accentColor: const Color(0xFF2196F3),
-                      content: latestQuote?.content.trim().isNotEmpty == true
-                          ? latestQuote!.content
-                          : 'Chưa có quote nào cho cuốn sách này.',
-                      actionLabel: quotes.length > 1 ? 'Hiển thị thêm' : null,
-                      onActionTap: quotes.length > 1
-                          ? () => _showAllQuotes(context, quotes)
+                      emptyText: 'Chưa có quote nào cho cuốn sách này.',
+                      entries: quotes
+                          .map((quote) => quote.content.trim())
+                          .where((content) => content.isNotEmpty)
+                          .toList(),
+                      isExpanded: _showAllQuotes,
+                      onToggleExpanded: quotes.length > 2
+                          ? () {
+                              setState(() {
+                                _showAllQuotes = !_showAllQuotes;
+                              });
+                            }
                           : null,
                       onAddTap: () => _openQuoteScanner(context, viewModel),
                     ),
@@ -472,13 +418,19 @@ class _BookDetailViewState extends State<_BookDetailView> {
                       title: 'Note',
                       icon: Icons.edit_note_rounded,
                       accentColor: const Color(0xFFFFC107),
-                      content: detail.note?.trim().isNotEmpty == true
-                          ? detail.note!
-                          : 'Chưa có note nào cho cuốn sách này.',
-                      actionLabel: detail.note?.trim().isNotEmpty == true
-                          ? 'Chỉnh sửa'
+                      emptyText: 'Chưa có note nào cho cuốn sách này.',
+                      entries: notes
+                          .map((note) => note.content.trim())
+                          .where((content) => content.isNotEmpty)
+                          .toList(),
+                      isExpanded: _showAllNotes,
+                      onToggleExpanded: notes.length > 2
+                          ? () {
+                              setState(() {
+                                _showAllNotes = !_showAllNotes;
+                              });
+                            }
                           : null,
-                      onActionTap: () => _openNoteEditor(context, viewModel),
                       onAddTap: () => _openNoteEditor(context, viewModel),
                     ),
                     if (detail.description != null &&
@@ -764,22 +716,27 @@ class _InsightCard extends StatelessWidget {
     required this.title,
     required this.icon,
     required this.accentColor,
-    required this.content,
+    required this.entries,
+    required this.emptyText,
+    required this.isExpanded,
     required this.onAddTap,
-    this.actionLabel,
-    this.onActionTap,
+    this.onToggleExpanded,
   });
 
   final String title;
   final IconData icon;
   final Color accentColor;
-  final String content;
+  final List<String> entries;
+  final String emptyText;
+  final bool isExpanded;
   final VoidCallback onAddTap;
-  final String? actionLabel;
-  final VoidCallback? onActionTap;
+  final VoidCallback? onToggleExpanded;
 
   @override
   Widget build(BuildContext context) {
+    final visibleEntries = isExpanded ? entries : entries.take(2).toList();
+    final hasOverflow = entries.length > 2;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
@@ -811,16 +768,17 @@ class _InsightCard extends StatelessWidget {
                   ),
                 ),
               ),
-              if (actionLabel != null && onActionTap != null)
-                TextButton(
-                  onPressed: onActionTap,
-                  child: Text(
-                    actionLabel!,
-                    style: const TextStyle(
-                      color: AppColors.accent,
-                      fontWeight: FontWeight.w700,
-                    ),
+              if (hasOverflow)
+                IconButton(
+                  onPressed: onToggleExpanded,
+                  icon: Icon(
+                    isExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.accent,
+                    size: 28,
                   ),
+                  tooltip: isExpanded ? 'Ẩn bớt' : 'Hiển thị thêm',
                 ),
               IconButton(
                 onPressed: onAddTap,
@@ -831,38 +789,105 @@ class _InsightCard extends StatelessWidget {
           const SizedBox(height: 8),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(18, 22, 18, 22),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
             decoration: BoxDecoration(
               color: const Color(0xFFF7F7FB),
               borderRadius: BorderRadius.circular(24),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 6,
-                  height: 98,
-                  decoration: BoxDecoration(
-                    color: accentColor,
-                    borderRadius: BorderRadius.circular(999),
+            child: entries.isEmpty
+                ? _InsightEntryBox(
+                    text: emptyText,
+                    accentColor: accentColor,
+                    isPlaceholder: true,
+                  )
+                : Column(
+                    children: [
+                      for (
+                        var index = 0;
+                        index < visibleEntries.length;
+                        index++
+                      )
+                        Padding(
+                          padding: EdgeInsets.only(
+                            bottom: index == visibleEntries.length - 1 ? 0 : 12,
+                          ),
+                          child: _InsightEntryBox(
+                            text: visibleEntries[index],
+                            accentColor: accentColor,
+                          ),
+                        ),
+                      if (hasOverflow && !isExpanded) ...[
+                        const SizedBox(height: 14),
+                        Center(
+                          child: Text(
+                            'Hiển thị ${entries.length - 2} mục nữa',
+                            style: TextStyle(
+                              color: AppColors.accent.withValues(alpha: 0.84),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ],
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Text(
-                    content,
-                    style: TextStyle(
-                      color: AppColors.darkBrown.withValues(alpha: 0.86),
-                      fontSize: 16,
-                      height: 1.55,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _InsightEntryBox extends StatelessWidget {
+  const _InsightEntryBox({
+    required this.text,
+    required this.accentColor,
+    this.isPlaceholder = false,
+  });
+
+  final String text;
+  final Color accentColor;
+  final bool isPlaceholder;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(
+          color: accentColor.withValues(alpha: isPlaceholder ? 0.18 : 0.24),
+          width: 1,
+        ),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 5,
+              decoration: BoxDecoration(
+                color: accentColor,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: isPlaceholder
+                      ? AppColors.darkBrown.withValues(alpha: 0.62)
+                      : AppColors.darkBrown.withValues(alpha: 0.86),
+                  fontSize: 15,
+                  height: 1.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

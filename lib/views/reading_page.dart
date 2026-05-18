@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 
 import '../core/constants/app_colors.dart';
 import '../core/services/api_service.dart';
+import '../data/models/book_note_model.dart';
+import '../data/models/book_quote_model.dart';
 import 'note_scan_page.dart';
 
 class ReadingPage extends StatefulWidget {
@@ -34,6 +36,7 @@ class ReadingPage extends StatefulWidget {
 }
 
 class _ReadingPageState extends State<ReadingPage> {
+  static const int _entryPreviewLimit = 2;
   static const int _minuteStep = 5;
   static const int _maxMinutes = 120;
   static const int _minMinutes = 5;
@@ -57,8 +60,12 @@ class _ReadingPageState extends State<ReadingPage> {
   final ApiService _apiService = ApiService();
   bool _isLoadingSessions = false;
   List<_ReadingSession> _readingSessions = const [];
+  List<BookQuoteModel> _savedQuotes = const [];
+  List<BookNoteModel> _savedNotes = const [];
   String _savedNoteValue = '';
   String _savedQuoteValue = '';
+  bool _showAllQuotes = false;
+  bool _showAllNotes = false;
 
   int get _itemCount => (_maxMinutes - _minMinutes) ~/ _minuteStep + 1;
   int get _selectedIndex => (_selectedMinutes - _minMinutes) ~/ _minuteStep;
@@ -75,6 +82,7 @@ class _ReadingPageState extends State<ReadingPage> {
     _savedNoteValue = _noteController.text.trim();
     _ensureTimeController();
     unawaited(_loadReadingSessions());
+    unawaited(_loadSavedEntries());
   }
 
   @override
@@ -274,6 +282,69 @@ class _ReadingPageState extends State<ReadingPage> {
     }
   }
 
+  Future<void> _loadSavedEntries() async {
+    final userId = widget.userId;
+    final userBookId = widget.userBookId;
+
+    if (userId == null || userBookId == null) {
+      return;
+    }
+
+    try {
+      final quoteResponse = await _apiService.get(
+        '/quotes/book/$userBookId?userId=$userId',
+        headers: widget.token == null
+            ? null
+            : {'Authorization': 'Bearer ${widget.token}'},
+      );
+
+      final noteResponse = await _apiService.get(
+        '/notes/book/$userBookId?userId=$userId',
+        headers: widget.token == null
+            ? null
+            : {'Authorization': 'Bearer ${widget.token}'},
+      );
+
+      final rawQuotes = quoteResponse['data'];
+      final rawNotes = noteResponse['data'];
+
+      final nextQuotes = rawQuotes is List
+          ? rawQuotes
+                .whereType<Map>()
+                .map(
+                  (item) =>
+                      BookQuoteModel.fromJson(Map<String, dynamic>.from(item)),
+                )
+                .where((item) => item.content.trim().isNotEmpty)
+                .toList()
+          : <BookQuoteModel>[];
+
+      final nextNotes = rawNotes is List
+          ? rawNotes
+                .whereType<Map>()
+                .map(
+                  (item) =>
+                      BookNoteModel.fromJson(Map<String, dynamic>.from(item)),
+                )
+                .where((item) => item.content.trim().isNotEmpty)
+                .toList()
+          : <BookNoteModel>[];
+
+      if (!mounted) {
+        _savedQuotes = nextQuotes;
+        _savedNotes = nextNotes;
+        return;
+      }
+
+      setState(() {
+        _savedQuotes = nextQuotes;
+        _savedNotes = nextNotes;
+      });
+    } catch (_) {
+      // Keep the page usable even if loading saved entries fails.
+    }
+  }
+
   Future<void> _openNoteScanner() async {
     if (_isScanningNote) {
       return;
@@ -411,8 +482,12 @@ class _ReadingPageState extends State<ReadingPage> {
 
     try {
       final result = await _apiService.post(
-        '/user-books/$userBookId/note',
-        {'user_id': userId, 'note': _noteController.text.trim()},
+        '/notes',
+        {
+          'user_id': userId,
+          'user_book_id': userBookId,
+          'content': _noteController.text.trim(),
+        },
         headers: widget.token == null
             ? null
             : {'Authorization': 'Bearer ${widget.token}'},
@@ -424,8 +499,13 @@ class _ReadingPageState extends State<ReadingPage> {
 
       if (result['success'] == true) {
         setState(() {
-          _savedNoteValue = _noteController.text.trim();
+          _savedNoteValue = '';
+          _noteController.clear();
         });
+        await _loadSavedEntries();
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Đã lưu note.')));
@@ -490,6 +570,10 @@ class _ReadingPageState extends State<ReadingPage> {
           _savedQuoteValue = content;
           _quoteController.clear();
         });
+        await _loadSavedEntries();
+        if (!mounted) {
+          return;
+        }
         ScaffoldMessenger.of(
           context,
         ).showSnackBar(const SnackBar(content: Text('Đã lưu quote.')));
@@ -828,6 +912,16 @@ class _ReadingPageState extends State<ReadingPage> {
                   actionEnabled:
                       !_isSavingQuote && !_isScanningNote && _hasUnsavedQuote,
                   onActionTap: _saveQuote,
+                  entries: _savedQuotes.map((item) => item.content).toList(),
+                  entriesExpanded: _showAllQuotes,
+                  onToggleEntries: _savedQuotes.length > _entryPreviewLimit
+                      ? () {
+                          setState(() {
+                            _showAllQuotes = !_showAllQuotes;
+                          });
+                        }
+                      : null,
+                  emptyEntriesText: 'Chưa có quote nào được lưu.',
                   headerAction: Tooltip(
                     message: _isScanningNote
                         ? 'Đang quét ảnh...'
@@ -841,7 +935,8 @@ class _ReadingPageState extends State<ReadingPage> {
                   ),
                   child: TextField(
                     controller: _quoteController,
-                    maxLines: 6,
+                    minLines: 1,
+                    maxLines: 4,
                     decoration: const InputDecoration(
                       hintText: 'OCR hoặc nhập tay quote của bạn...',
                       border: InputBorder.none,
@@ -862,9 +957,20 @@ class _ReadingPageState extends State<ReadingPage> {
                   actionLabel: _isSavingNote ? 'Đang lưu...' : 'Save',
                   actionEnabled: !_isSavingNote && _hasUnsavedNote,
                   onActionTap: _saveNote,
+                  entries: _savedNotes.map((item) => item.content).toList(),
+                  entriesExpanded: _showAllNotes,
+                  onToggleEntries: _savedNotes.length > _entryPreviewLimit
+                      ? () {
+                          setState(() {
+                            _showAllNotes = !_showAllNotes;
+                          });
+                        }
+                      : null,
+                  emptyEntriesText: 'Chưa có note nào được lưu.',
                   child: TextField(
                     controller: _noteController,
-                    maxLines: 6,
+                    minLines: 1,
+                    maxLines: 4,
                     decoration: const InputDecoration(
                       hintText: 'Viết note cho cuốn sách này...',
                       border: InputBorder.none,
@@ -1261,6 +1367,8 @@ class _InfoCard extends StatelessWidget {
 }
 
 class _ReadingEntryCard extends StatelessWidget {
+  static const int _previewLimit = 2;
+
   const _ReadingEntryCard({
     required this.title,
     required this.accentColor,
@@ -1269,7 +1377,11 @@ class _ReadingEntryCard extends StatelessWidget {
     required this.actionLabel,
     required this.actionEnabled,
     required this.onActionTap,
+    required this.entries,
+    required this.entriesExpanded,
+    required this.emptyEntriesText,
     this.headerAction,
+    this.onToggleEntries,
   });
 
   final String title;
@@ -1279,10 +1391,19 @@ class _ReadingEntryCard extends StatelessWidget {
   final String actionLabel;
   final bool actionEnabled;
   final VoidCallback onActionTap;
+  final List<String> entries;
+  final bool entriesExpanded;
+  final String emptyEntriesText;
   final Widget? headerAction;
+  final VoidCallback? onToggleEntries;
 
   @override
   Widget build(BuildContext context) {
+    final visibleEntries = entriesExpanded
+        ? entries
+        : entries.take(_previewLimit).toList();
+    final hasOverflow = entries.length > _previewLimit;
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(18, 18, 18, 16),
@@ -1318,6 +1439,17 @@ class _ReadingEntryCard extends StatelessWidget {
                 headerAction!,
                 const SizedBox(width: 8),
               ],
+              if (hasOverflow)
+                IconButton(
+                  onPressed: onToggleEntries,
+                  icon: Icon(
+                    entriesExpanded
+                        ? Icons.keyboard_arrow_up_rounded
+                        : Icons.keyboard_arrow_down_rounded,
+                    color: AppColors.accent,
+                  ),
+                  tooltip: entriesExpanded ? 'Ẩn bớt' : 'Hiển thị thêm',
+                ),
               _SaveButton(
                 label: actionLabel,
                 enabled: actionEnabled,
@@ -1328,28 +1460,117 @@ class _ReadingEntryCard extends StatelessWidget {
           const SizedBox(height: 14),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(18, 14, 18, 14),
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             decoration: BoxDecoration(
               color: const Color(0xFFF7F7FB),
               borderRadius: BorderRadius.circular(22),
             ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 6,
-                  height: 92,
-                  decoration: BoxDecoration(
-                    color: accentColor,
-                    borderRadius: BorderRadius.circular(999),
+            child: IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    width: 6,
+                    decoration: BoxDecoration(
+                      color: accentColor,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(child: child),
-              ],
+                  const SizedBox(width: 14),
+                  Expanded(child: child),
+                ],
+              ),
             ),
           ),
+          const SizedBox(height: 12),
+          if (entries.isEmpty)
+            _SavedEntryBox(
+              text: emptyEntriesText,
+              accentColor: accentColor,
+              isPlaceholder: true,
+            )
+          else
+            Column(
+              children: [
+                for (var index = 0; index < visibleEntries.length; index++)
+                  Padding(
+                    padding: EdgeInsets.only(
+                      bottom: index == visibleEntries.length - 1 ? 0 : 10,
+                    ),
+                    child: _SavedEntryBox(
+                      text: visibleEntries[index],
+                      accentColor: accentColor,
+                    ),
+                  ),
+                if (hasOverflow && !entriesExpanded) ...[
+                  const SizedBox(height: 14),
+                  Center(
+                    child: Text(
+                      'Hiển thị ${entries.length - _previewLimit} mục nữa',
+                      style: TextStyle(
+                        color: AppColors.accent.withValues(alpha: 0.84),
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
         ],
+      ),
+    );
+  }
+}
+
+class _SavedEntryBox extends StatelessWidget {
+  const _SavedEntryBox({
+    required this.text,
+    required this.accentColor,
+    this.isPlaceholder = false,
+  });
+
+  final String text;
+  final Color accentColor;
+  final bool isPlaceholder;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(14, 14, 14, 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: accentColor.withValues(alpha: isPlaceholder ? 0.16 : 0.22),
+        ),
+      ),
+      child: IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              width: 5,
+              decoration: BoxDecoration(
+                color: accentColor,
+                borderRadius: BorderRadius.circular(999),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(
+                  color: isPlaceholder
+                      ? AppColors.darkBrown.withValues(alpha: 0.62)
+                      : AppColors.darkBrown.withValues(alpha: 0.86),
+                  fontWeight: FontWeight.w600,
+                  height: 1.5,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

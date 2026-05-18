@@ -60,7 +60,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
   final _imagePicker = ImagePicker();
   final _titleController = TextEditingController();
   final _authorController = TextEditingController();
-  final _noteController = TextEditingController();
   final _startDateController = TextEditingController();
   final _finishDateController = TextEditingController();
   final _onlineSearchController = TextEditingController();
@@ -84,7 +83,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
     if (initialBook != null) {
       _titleController.text = initialBook.title;
       _authorController.text = initialBook.author;
-      _noteController.text = initialBook.note ?? '';
       _startDateController.text = initialBook.startDate ?? '';
       _finishDateController.text = initialBook.finishDate ?? '';
       _selectedStatus = initialBook.status;
@@ -105,7 +103,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
   void dispose() {
     _titleController.dispose();
     _authorController.dispose();
-    _noteController.dispose();
     _startDateController.dispose();
     _finishDateController.dispose();
     _onlineSearchController.dispose();
@@ -202,9 +199,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
     final author = _authorController.text.trim().isEmpty
         ? null
         : _authorController.text.trim();
-    final note = _noteController.text.trim().isEmpty
-        ? null
-        : _noteController.text.trim();
     final startDate = _startDateController.text.trim().isEmpty
         ? null
         : _startDateController.text.trim();
@@ -218,7 +212,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
             author: author,
             status: _selectedStatus,
             rating: _selectedRating,
-            note: note,
             startDate: startDate,
             finishDate: finishDate,
             coverImagePath: _selectedCoverImage?.path,
@@ -229,7 +222,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
             author: author,
             status: _selectedStatus,
             rating: _selectedRating,
-            note: note,
             startDate: startDate,
             finishDate: finishDate,
             coverImagePath: _selectedCoverImage?.path,
@@ -428,13 +420,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
 
                                 return null;
                               },
-                            ),
-                            const SizedBox(height: 18),
-                            const _FieldLabel('Note'),
-                            _BookTextField(
-                              controller: _noteController,
-                              hintText: 'Add your notes',
-                              maxLines: 4,
                             ),
                           ],
                           if (viewModel.errorMessage != null) ...[
@@ -900,7 +885,6 @@ class _BookTextField extends StatelessWidget {
     required this.controller,
     required this.hintText,
     this.validator,
-    this.maxLines = 1,
     this.readOnly = false,
     this.onTap,
     this.suffixIcon,
@@ -909,7 +893,6 @@ class _BookTextField extends StatelessWidget {
   final TextEditingController controller;
   final String hintText;
   final String? Function(String?)? validator;
-  final int maxLines;
   final bool readOnly;
   final VoidCallback? onTap;
   final IconData? suffixIcon;
@@ -919,7 +902,6 @@ class _BookTextField extends StatelessWidget {
     return TextFormField(
       controller: controller,
       validator: validator,
-      maxLines: maxLines,
       readOnly: readOnly,
       onTap: onTap,
       style: const TextStyle(

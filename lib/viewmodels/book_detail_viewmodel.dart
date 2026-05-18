@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../core/services/api_service.dart';
 import '../data/models/book_detail_model.dart';
+import '../data/models/book_note_model.dart';
 import '../data/models/book_quote_model.dart';
 import '../data/models/user_model.dart';
 
@@ -19,6 +20,7 @@ class BookDetailViewModel extends ChangeNotifier {
   final String? token;
 
   BookDetailModel? detail;
+  List<BookNoteModel> notes = const [];
   List<BookQuoteModel> quotes = const [];
   bool isLoading = false;
   bool isStartingReading = false;
@@ -59,6 +61,27 @@ class BookDetailViewModel extends ChangeNotifier {
               : const [];
         } else {
           quotes = const [];
+        }
+
+        final noteResult = await _apiService.get(
+          '/notes/book/$userBookId?userId=${user.id}',
+          headers: token == null ? null : {'Authorization': 'Bearer $token'},
+        );
+
+        if (noteResult['success'] == true) {
+          final rawNotes = noteResult['data'];
+          notes = rawNotes is List
+              ? rawNotes
+                    .whereType<Map>()
+                    .map(
+                      (item) => BookNoteModel.fromJson(
+                        Map<String, dynamic>.from(item),
+                      ),
+                    )
+                    .toList()
+              : const [];
+        } else {
+          notes = const [];
         }
       } else {
         errorMessage =
@@ -111,34 +134,15 @@ class BookDetailViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final result = await _apiService.post(
-        '/user-books/$userBookId/note',
-        {'user_id': user.id, 'note': note},
-        headers: token == null ? null : {'Authorization': 'Bearer $token'},
-      );
+      final result = await _apiService.post('/notes', {
+        'user_id': user.id,
+        'user_book_id': userBookId,
+        'content': note,
+      }, headers: token == null ? null : {'Authorization': 'Bearer $token'});
 
       if (result['success'] == true) {
         final data = result['data'] as Map<String, dynamic>? ?? {};
-        final currentDetail = detail;
-        if (currentDetail != null) {
-          detail = BookDetailModel.fromJson({
-            'id': currentDetail.id,
-            'user_id': currentDetail.userId,
-            'book_id': currentDetail.bookId,
-            'title': currentDetail.title,
-            'author': currentDetail.author,
-            'status': currentDetail.status,
-            'cover_image_url': currentDetail.coverImageUrl,
-            'rating': currentDetail.rating,
-            'note': data['note'],
-            'start_date': currentDetail.startDate,
-            'finish_date': currentDetail.finishDate,
-            'category': currentDetail.category,
-            'isbn': currentDetail.isbn,
-            'published_year': currentDetail.publishedYear,
-            'description': currentDetail.description,
-          });
-        }
+        notes = [BookNoteModel.fromJson(data), ...notes];
         isSavingNote = false;
         notifyListeners();
         return true;
