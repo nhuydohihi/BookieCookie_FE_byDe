@@ -142,9 +142,72 @@ class _BookDetailViewState extends State<_BookDetailView> {
     final detail = viewModel.detail;
     if (detail == null) return;
 
-    final controller = TextEditingController();
+    final draft = await _showEntrySheet(
+      context: context,
+      title: 'Save Note',
+      hintText: 'Viết note của bạn...',
+      icon: Icons.edit_note_rounded,
+    );
 
-    final saved = await showModalBottomSheet<bool>(
+    if (draft != null && draft.trim().isNotEmpty) {
+      await Future<void>.delayed(Duration.zero);
+      final didSave = await viewModel.saveNote(draft.trim());
+      if (!context.mounted) return;
+      if (!didSave) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Không lưu được note.')));
+        return;
+      }
+      _didChange = true;
+      await viewModel.loadDetail();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Đã lưu note.')));
+    }
+  }
+
+  Future<void> _openQuoteEditor(
+    BuildContext context,
+    BookDetailViewModel viewModel,
+  ) async {
+    final detail = viewModel.detail;
+    if (detail == null) return;
+
+    final draft = await _showEntrySheet(
+      context: context,
+      title: 'Save Quote',
+      hintText: 'Nhập quote của bạn...',
+      icon: Icons.format_quote_rounded,
+    );
+
+    if (draft != null && draft.trim().isNotEmpty) {
+      await Future<void>.delayed(Duration.zero);
+      final didSave = await viewModel.saveQuote(draft.trim());
+      if (!context.mounted) return;
+      if (!didSave) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Không lưu được quote.')));
+        return;
+      }
+      _didChange = true;
+      await viewModel.loadDetail();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Đã lưu quote.')));
+    }
+  }
+
+  Future<String?> _showEntrySheet({
+    required BuildContext context,
+    required String title,
+    required String hintText,
+    required IconData icon,
+  }) async {
+    final result = await showModalBottomSheet<String>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
@@ -155,112 +218,15 @@ class _BookDetailViewState extends State<_BookDetailView> {
             right: 16,
             bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 16,
           ),
-          child: StatefulBuilder(
-            builder: (context, setSheetState) {
-              final hasChanged = controller.text.trim().isNotEmpty;
-
-              return Container(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(28),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(
-                          Icons.edit_note_rounded,
-                          color: AppColors.accent,
-                        ),
-                        const SizedBox(width: 10),
-                        const Expanded(
-                          child: Text(
-                            'Save Note',
-                            style: TextStyle(
-                              color: AppColors.accent,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          onPressed: () => Navigator.pop(sheetContext, false),
-                          icon: const Icon(Icons.close_rounded),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: controller,
-                      maxLines: 8,
-                      autofocus: true,
-                      onChanged: (_) => setSheetState(() {}),
-                      decoration: InputDecoration(
-                        hintText: 'Viết note của bạn...',
-                        filled: true,
-                        fillColor: const Color(0xFFF7F7FB),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(22),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: !hasChanged || viewModel.isSavingNote
-                            ? null
-                            : () async {
-                                final didSave = await viewModel.saveNote(
-                                  controller.text.trim(),
-                                );
-                                if (!context.mounted) return;
-                                if (didSave) {
-                                  Navigator.pop(sheetContext, true);
-                                } else {
-                                  ScaffoldMessenger.of(context).showSnackBar(
-                                    const SnackBar(
-                                      content: Text('Không lưu được note.'),
-                                    ),
-                                  );
-                                }
-                              },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppColors.accent,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(18),
-                          ),
-                        ),
-                        child: Text(
-                          viewModel.isSavingNote ? 'Đang lưu...' : 'Save',
-                          style: const TextStyle(fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            },
+          child: _EntryEditorSheet(
+            title: title,
+            hintText: hintText,
+            icon: icon,
           ),
         );
       },
     );
-
-    controller.dispose();
-
-    if (saved == true) {
-      _didChange = true;
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Đã lưu note.')));
-    }
+    return result;
   }
 
   void _handleBack() {
@@ -328,11 +294,6 @@ class _BookDetailViewState extends State<_BookDetailView> {
                         ),
                         const SizedBox(width: 10),
                         _DetailActionButton(
-                          icon: Icons.format_quote_rounded,
-                          onTap: () => _openQuoteScanner(context, viewModel),
-                        ),
-                        const SizedBox(width: 10),
-                        _DetailActionButton(
                           icon: Icons.play_arrow_rounded,
                           onTap: viewModel.isStartingReading
                               ? null
@@ -385,13 +346,7 @@ class _BookDetailViewState extends State<_BookDetailView> {
                     const SizedBox(height: 28),
                     _DetailBlock(
                       title: 'Đánh giá',
-                      child: Row(
-                        children: [
-                          _StatusPill(label: _statusLabel(detail.status)),
-                          const SizedBox(width: 12),
-                          _RatingRow(rating: detail.rating ?? 0),
-                        ],
-                      ),
+                      child: _RatingRow(rating: detail.rating ?? 0),
                     ),
                     const SizedBox(height: 24),
                     _InsightCard(
@@ -411,7 +366,14 @@ class _BookDetailViewState extends State<_BookDetailView> {
                               });
                             }
                           : null,
-                      onAddTap: () => _openQuoteScanner(context, viewModel),
+                      headerAction: Tooltip(
+                        message: 'OCR từ ảnh',
+                        child: _CardActionButton(
+                          icon: Icons.camera_alt_rounded,
+                          onTap: () => _openQuoteScanner(context, viewModel),
+                        ),
+                      ),
+                      onAddTap: () => _openQuoteEditor(context, viewModel),
                     ),
                     const SizedBox(height: 20),
                     _InsightCard(
@@ -480,27 +442,57 @@ class _BookMetaSection extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 10),
-        Wrap(
-          runSpacing: 12,
-          spacing: 12,
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            _MetaChip(icon: Icons.person_outline_rounded, text: detail.author),
-            if (detail.publishedYear != null)
+            Expanded(child: _AuthorLine(author: detail.author)),
+            const SizedBox(width: 12),
+            _StatusPill(label: _statusLabel(detail.status)),
+          ],
+        ),
+        if (detail.publishedYear != null) ...[
+          const SizedBox(height: 12),
+          Wrap(
+            runSpacing: 12,
+            spacing: 12,
+            children: [
               _MetaChip(
                 icon: Icons.auto_stories_outlined,
                 text: 'Published ${detail.publishedYear}',
               ),
-            if (detail.startDate != null && detail.startDate!.isNotEmpty)
-              _MetaChip(
-                icon: Icons.play_circle_outline_rounded,
-                text: detail.startDate!,
-              ),
-            if (detail.finishDate != null && detail.finishDate!.isNotEmpty)
-              _MetaChip(
-                icon: Icons.check_circle_outline_rounded,
-                text: detail.finishDate!,
-              ),
-          ],
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+class _AuthorLine extends StatelessWidget {
+  const _AuthorLine({required this.author});
+
+  final String author;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        const Icon(
+          Icons.person_outline_rounded,
+          size: 18,
+          color: AppColors.primary,
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            author,
+            style: TextStyle(
+              color: AppColors.darkBrown.withValues(alpha: 0.82),
+              fontSize: 16,
+              fontWeight: FontWeight.w700,
+              height: 1.35,
+            ),
+          ),
         ),
       ],
     );
@@ -622,6 +614,143 @@ class _DetailActionButton extends StatelessWidget {
   }
 }
 
+class _CardActionButton extends StatelessWidget {
+  const _CardActionButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.primary.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.14),
+            ),
+          ),
+          child: Icon(icon, size: 18, color: AppColors.primary),
+        ),
+      ),
+    );
+  }
+}
+
+class _EntryEditorSheet extends StatefulWidget {
+  const _EntryEditorSheet({
+    required this.title,
+    required this.hintText,
+    required this.icon,
+  });
+
+  final String title;
+  final String hintText;
+  final IconData icon;
+
+  @override
+  State<_EntryEditorSheet> createState() => _EntryEditorSheetState();
+}
+
+class _EntryEditorSheetState extends State<_EntryEditorSheet> {
+  late final TextEditingController _controller;
+
+  bool get _hasValue => _controller.text.trim().isNotEmpty;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController();
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(28),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(widget.icon, color: AppColors.accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  widget.title,
+                  style: const TextStyle(
+                    color: AppColors.accent,
+                    fontSize: 20,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: () => Navigator.pop(context),
+                icon: const Icon(Icons.close_rounded),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            maxLines: 8,
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
+            decoration: InputDecoration(
+              hintText: widget.hintText,
+              filled: true,
+              fillColor: const Color(0xFFF7F7FB),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(22),
+                borderSide: BorderSide.none,
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _hasValue
+                  ? () => Navigator.pop(context, _controller.text.trim())
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.accent,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(18),
+                ),
+              ),
+              child: const Text(
+                'Save',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _DetailCoverFallback extends StatelessWidget {
   const _DetailCoverFallback({required this.title});
 
@@ -720,6 +849,7 @@ class _InsightCard extends StatelessWidget {
     required this.emptyText,
     required this.isExpanded,
     required this.onAddTap,
+    this.headerAction,
     this.onToggleExpanded,
   });
 
@@ -730,6 +860,7 @@ class _InsightCard extends StatelessWidget {
   final String emptyText;
   final bool isExpanded;
   final VoidCallback onAddTap;
+  final Widget? headerAction;
   final VoidCallback? onToggleExpanded;
 
   @override
@@ -768,6 +899,10 @@ class _InsightCard extends StatelessWidget {
                   ),
                 ),
               ),
+              if (headerAction != null) ...[
+                headerAction!,
+                const SizedBox(width: 4),
+              ],
               if (hasOverflow)
                 IconButton(
                   onPressed: onToggleExpanded,

@@ -24,7 +24,6 @@ class BookDetailViewModel extends ChangeNotifier {
   List<BookQuoteModel> quotes = const [];
   bool isLoading = false;
   bool isStartingReading = false;
-  bool isSavingNote = false;
   String? errorMessage;
 
   Future<void> loadDetail() async {
@@ -128,11 +127,6 @@ class BookDetailViewModel extends ChangeNotifier {
   }
 
   Future<bool> saveNote(String note) async {
-    if (isSavingNote) return false;
-
-    isSavingNote = true;
-    notifyListeners();
-
     try {
       final result = await _apiService.post('/notes', {
         'user_id': user.id,
@@ -141,18 +135,32 @@ class BookDetailViewModel extends ChangeNotifier {
       }, headers: token == null ? null : {'Authorization': 'Bearer $token'});
 
       if (result['success'] == true) {
-        final data = result['data'] as Map<String, dynamic>? ?? {};
-        notes = [BookNoteModel.fromJson(data), ...notes];
-        isSavingNote = false;
-        notifyListeners();
         return true;
       }
     } catch (_) {
       // Surface a simple failure state to the caller.
     }
 
-    isSavingNote = false;
-    notifyListeners();
+    return false;
+  }
+
+  Future<bool> saveQuote(String quote) async {
+    try {
+      final result = await _apiService.post('/quotes', {
+        'user_id': user.id,
+        'user_book_id': userBookId,
+        'content': quote,
+        'ocr_text': quote,
+        'ocr_status': 'manual',
+      }, headers: token == null ? null : {'Authorization': 'Bearer $token'});
+
+      if (result['success'] == true) {
+        return true;
+      }
+    } catch (_) {
+      // Surface a simple failure state to the caller.
+    }
+
     return false;
   }
 }

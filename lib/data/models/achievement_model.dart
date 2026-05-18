@@ -61,6 +61,9 @@ class AchievementModel {
       targetType: json['target_type'] as String? ?? 'books_finished',
       targetValue: _toInt(json['target_value']),
       createdAt: _toDateTime(json['created_at']),
+      progressValue: _toInt(json['progress_value']),
+      isUnlocked: json['is_unlocked'] as bool? ?? false,
+      achievedAt: _toDateTime(json['achieved_at']),
     );
   }
 }
@@ -164,6 +167,23 @@ class ChallengeOverview {
       yearlyActivityLevels: List<int>.filled(daysInYear, 0),
     );
   }
+
+  factory ChallengeOverview.fromJson(Map<String, dynamic> json) {
+    final activityJson = json['yearly_activity_levels'] as List<dynamic>? ?? [];
+
+    return ChallengeOverview(
+      year: _toInt(json['year']),
+      readingHours: _toInt(json['reading_hours']),
+      booksFinished: _toInt(json['books_finished']),
+      streakDays: _toInt(json['streak_days']),
+      quotesSaved: _toInt(json['quotes_saved']),
+      currentReadingCount: _toInt(json['current_reading_count']),
+      activeDays: _toInt(json['active_days']),
+      completionRate: _toDouble(json['completion_rate']),
+      yearlyActivityLevels: activityJson.map(_toInt).toList(),
+      highlightedBookTitle: json['highlighted_book_title'] as String?,
+    );
+  }
 }
 
 IconData iconForAchievement(String iconUrl, String targetType) {
@@ -209,6 +229,14 @@ int _toInt(dynamic value) {
   }
 
   return int.tryParse('$value') ?? 0;
+}
+
+double _toDouble(dynamic value) {
+  if (value is num) {
+    return value.toDouble();
+  }
+
+  return double.tryParse('$value') ?? 0;
 }
 
 DateTime? _toDateTime(dynamic value) {

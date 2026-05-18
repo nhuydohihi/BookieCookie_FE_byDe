@@ -39,26 +39,83 @@ class ChallengeViewModel extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final stats = await _loadStats();
-      overview = stats.overview;
-      achievements = await _loadAchievements(stats);
+      final payload = await _loadChallengePayload();
+      overview = payload.overview;
+      achievements = payload.achievements;
     } catch (_) {
-      overview = ChallengeOverview.empty();
-      achievements = _buildFallbackAchievements(
-        AchievementStats(
-          readingHours: 0,
-          booksFinished: 0,
-          streakDays: 0,
-          quotesSaved: 0,
-          overview: ChallengeOverview.empty(),
-        ),
-      );
-      errorMessage =
-          'Could not load challenge data from server. Showing starter achievements.';
+      try {
+        final stats = await _loadStats();
+        overview = stats.overview;
+        achievements = await _loadAchievements(stats);
+        errorMessage =
+            'Live challenge progress is temporarily unavailable. Showing dashboard-based progress.';
+      } catch (_) {
+        overview = ChallengeOverview.empty();
+        achievements = _buildFallbackAchievements(
+          AchievementStats(
+            readingHours: 0,
+            booksFinished: 0,
+            streakDays: 0,
+            quotesSaved: 0,
+            overview: ChallengeOverview.empty(),
+          ),
+        );
+        errorMessage =
+            'Could not load challenge data from server. Showing starter achievements.';
+      }
     }
 
     isLoading = false;
     notifyListeners();
+  }
+
+  Future<_ChallengePayload> _loadChallengePayload() async {
+    final result = await _apiService.get(
+      '/achievements/user/${user.id}',
+      headers: _authHeaders,
+    );
+
+    if (result['success'] != true) {
+      throw const ApiException('Failed to load challenge progress');
+    }
+
+    final data = result['data'] as Map<String, dynamic>? ?? {};
+    final overviewJson = data['overview'] as Map<String, dynamic>? ?? {};
+    final achievementItems = data['achievements'] as List<dynamic>? ?? [];
+
+    final overview = ChallengeOverview.fromJson(overviewJson);
+    final achievements =
+        achievementItems
+            .whereType<Map>()
+            .map(
+              (item) =>
+                  AchievementModel.fromJson(Map<String, dynamic>.from(item)),
+            )
+            .toList()
+          ..sort((a, b) {
+            if (a.isUnlocked != b.isUnlocked) {
+              return a.isUnlocked ? -1 : 1;
+            }
+
+            return a.targetValue.compareTo(b.targetValue);
+          });
+
+    if (achievements.isEmpty) {
+      final stats = AchievementStats(
+        readingHours: overview.readingHours,
+        booksFinished: overview.booksFinished,
+        streakDays: overview.streakDays,
+        quotesSaved: overview.quotesSaved,
+        overview: overview,
+      );
+
+      return _ChallengePayload(
+        overview: overview,
+        achievements: _buildFallbackAchievements(stats),
+      );
+    }
+
+    return _ChallengePayload(overview: overview, achievements: achievements);
   }
 
   Future<AchievementStats> _loadStats() async {
@@ -305,4 +362,11 @@ class ChallengeViewModel extends ChangeNotifier {
       yearlyActivityLevels: activityLevels,
     );
   }
+}
+
+class _ChallengePayload {
+  const _ChallengePayload({required this.overview, required this.achievements});
+
+  final ChallengeOverview overview;
+  final List<AchievementModel> achievements;
 }
