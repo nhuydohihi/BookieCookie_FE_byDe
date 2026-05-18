@@ -15,8 +15,25 @@ class ApiException implements Exception {
 }
 
 class ApiService {
-  static const String baseUrl = 'http://10.0.2.2:5000/api';
+  static const String _defaultBaseUrl = 'http://10.0.2.2:5000/api';
+  static const String _configuredBaseUrl = String.fromEnvironment(
+    'API_BASE_URL',
+    defaultValue: _defaultBaseUrl,
+  );
   static const Duration _timeout = Duration(seconds: 12);
+
+  static String get baseUrl => _normalizeBaseUrl(_configuredBaseUrl);
+
+  static String _normalizeBaseUrl(String url) {
+    final trimmed = url.trim();
+    if (trimmed.isEmpty) {
+      return _defaultBaseUrl;
+    }
+
+    return trimmed.endsWith('/')
+        ? trimmed.substring(0, trimmed.length - 1)
+        : trimmed;
+  }
 
   Future<Map<String, dynamic>> get(
     String endpoint, {
@@ -34,7 +51,7 @@ class ApiService {
       );
     } on SocketException {
       throw const ApiException(
-        'Không kết nối được tới server. Nếu đang dùng Android emulator hãy chạy backend ở cổng 5000.',
+        'Không kết nối được tới server. Hãy kiểm tra API_BASE_URL hoặc backend đang chạy.',
       );
     } on http.ClientException {
       throw const ApiException(
@@ -70,25 +87,20 @@ class ApiService {
         'Ket noi toi Google Books API that bai. Hay thu lai sau.',
       );
     } on FormatException {
-      throw const ApiException(
-        'Google Books API tra ve du lieu khong hop le.',
-      );
+      throw const ApiException('Google Books API tra ve du lieu khong hop le.');
     }
   }
 
   Future<Map<String, dynamic>> post(
     String endpoint,
-    Map<String, dynamic> data,
-    {Map<String, String>? headers}
-  ) async {
+    Map<String, dynamic> data, {
+    Map<String, String>? headers,
+  }) async {
     try {
       final response = await http
           .post(
             Uri.parse('$baseUrl$endpoint'),
-            headers: {
-              'Content-Type': 'application/json',
-              ...?headers,
-            },
+            headers: {'Content-Type': 'application/json', ...?headers},
             body: jsonEncode(data),
           )
           .timeout(_timeout);
@@ -100,7 +112,7 @@ class ApiService {
       );
     } on SocketException {
       throw const ApiException(
-        'Không kết nối được tới server. Nếu đang dùng Android emulator hãy chạy backend ở cổng 5000.',
+        'Không kết nối được tới server. Hãy kiểm tra API_BASE_URL hoặc backend đang chạy.',
       );
     } on http.ClientException {
       throw const ApiException(
@@ -121,17 +133,15 @@ class ApiService {
     Map<String, String>? headers,
   }) async {
     try {
-      final request = http.MultipartRequest(
-        'POST',
-        Uri.parse('$baseUrl$endpoint'),
-      )
-        ..headers.addAll(headers ?? {})
-        ..fields.addAll(fields);
+      final request =
+          http.MultipartRequest('POST', Uri.parse('$baseUrl$endpoint'))
+            ..headers.addAll(headers ?? {})
+            ..fields.addAll(fields);
 
-      if (fileField != null &&
-          filePath != null &&
-          filePath.trim().isNotEmpty) {
-        request.files.add(await http.MultipartFile.fromPath(fileField, filePath));
+      if (fileField != null && filePath != null && filePath.trim().isNotEmpty) {
+        request.files.add(
+          await http.MultipartFile.fromPath(fileField, filePath),
+        );
       }
 
       final streamedResponse = await request.send().timeout(_timeout);
@@ -144,7 +154,7 @@ class ApiService {
       );
     } on SocketException {
       throw const ApiException(
-        'Không kết nối được tới server. Nếu đang dùng Android emulator hãy chạy backend ở cổng 5000.',
+        'Không kết nối được tới server. Hãy kiểm tra API_BASE_URL hoặc backend đang chạy.',
       );
     } on http.ClientException {
       throw const ApiException(
@@ -177,7 +187,8 @@ class ApiService {
     }
 
     throw ApiException(
-      result['message'] as String? ?? 'Server trả về lỗi ${response.statusCode}.',
+      result['message'] as String? ??
+          'Server trả về lỗi ${response.statusCode}.',
     );
   }
 }
