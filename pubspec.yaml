@@ -41,6 +41,10 @@ dependencies:
   google_mlkit_text_recognition: ^0.15.1
   google_mlkit_barcode_scanning: ^0.14.1
   mobile_scanner: ^5.2.3
+  path_provider: ^2.1.5
+  share_plus: ^11.1.0
+  gallery_saver_plus: ^3.2.9
+  image: ^4.5.4
 
 dev_dependencies:
   flutter_test:
@@ -68,6 +72,7 @@ flutter:
   assets:
     - assets/images/logo.png
     - assets/images/logo_ngang.png
+    - assets/images/badge.png
     - .env
 
   # An image asset can refer to one or more resolution-specific "variants", see

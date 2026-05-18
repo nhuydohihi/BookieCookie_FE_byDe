@@ -9,6 +9,7 @@ import 'account_page.dart';
 import 'home_page.dart';
 import 'library_page.dart';
 import 'statistic_page.dart';
+import 'widgets/achievement_share_sheet.dart';
 import 'widgets/app_bottom_bar.dart';
 
 class ChallengePage extends StatelessWidget {
@@ -72,6 +73,22 @@ class _ChallengePageView extends StatelessWidget {
     }
   }
 
+  void _handleAchievementTap(
+    BuildContext context,
+    AchievementModel achievement,
+  ) {
+    if (!achievement.isUnlocked) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Unlock this medal first to save or share it.'),
+        ),
+      );
+      return;
+    }
+
+    showAchievementShareSheet(context, achievement: achievement);
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -131,6 +148,10 @@ class _ChallengePageView extends StatelessWidget {
                             itemBuilder: (context, index) {
                               return _AchievementCard(
                                 achievement: challengeVM.achievements[index],
+                                onTap: () => _handleAchievementTap(
+                                  context,
+                                  challengeVM.achievements[index],
+                                ),
                               );
                             },
                           ),
@@ -145,6 +166,10 @@ class _ChallengePageView extends StatelessWidget {
                                 padding: const EdgeInsets.only(bottom: 12),
                                 child: _UnlockedAchievementTile(
                                   achievement: achievement,
+                                  onTap: () => _handleAchievementTap(
+                                    context,
+                                    achievement,
+                                  ),
                                 ),
                               ),
                             ),
@@ -399,9 +424,10 @@ class _SectionTitle extends StatelessWidget {
 }
 
 class _AchievementCard extends StatelessWidget {
-  const _AchievementCard({required this.achievement});
+  const _AchievementCard({required this.achievement, required this.onTap});
 
   final AchievementModel achievement;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
@@ -410,88 +436,109 @@ class _AchievementCard extends StatelessWidget {
       achievement.isUnlocked,
     );
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(28),
-        border: Border.all(color: tint.withValues(alpha: 0.18)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+        child: Container(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(color: tint.withValues(alpha: 0.18)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _MedalIconBadge(achievement: achievement, size: 58),
-              const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: achievement.isUnlocked
-                      ? AppColors.accent.withValues(alpha: 0.10)
-                      : AppColors.darkBrown.withValues(alpha: 0.08),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Text(
-                  achievement.isUnlocked ? 'Unlocked' : 'In progress',
-                  style: TextStyle(
-                    color: achievement.isUnlocked
-                        ? AppColors.accent
-                        : AppColors.darkBrown,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
+              Row(
+                children: [
+                  _MedalIconBadge(achievement: achievement, size: 58),
+                  const Spacer(),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: achievement.isUnlocked
+                          ? AppColors.accent.withValues(alpha: 0.10)
+                          : AppColors.darkBrown.withValues(alpha: 0.08),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      achievement.isUnlocked ? 'Unlocked' : 'In progress',
+                      style: TextStyle(
+                        color: achievement.isUnlocked
+                            ? AppColors.accent
+                            : AppColors.darkBrown,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
                   ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              Text(
+                achievement.name,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(
+                  color: AppColors.darkBlue,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  height: 1.25,
                 ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                achievement.description,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  color: AppColors.darkBrown.withValues(alpha: 0.76),
+                  fontSize: 12,
+                  height: 1.35,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const Spacer(),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  minHeight: 8,
+                  value: achievement.progress,
+                  backgroundColor: tint.withValues(alpha: 0.10),
+                  valueColor: AlwaysStoppedAnimation<Color>(tint),
+                ),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${achievement.progressValue}/${achievement.targetValue} ${_targetLabel(achievement.targetType)}',
+                      style: TextStyle(
+                        color: tint,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Icon(
+                    achievement.isUnlocked
+                        ? Icons.ios_share_rounded
+                        : Icons.lock_outline_rounded,
+                    size: 16,
+                    color: tint.withValues(alpha: 0.82),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Text(
-            achievement.name,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: AppColors.darkBlue,
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              height: 1.25,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            achievement.description,
-            maxLines: 3,
-            overflow: TextOverflow.ellipsis,
-            style: TextStyle(
-              color: AppColors.darkBrown.withValues(alpha: 0.76),
-              fontSize: 12,
-              height: 1.35,
-              fontWeight: FontWeight.w600,
-            ),
-          ),
-          const Spacer(),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(999),
-            child: LinearProgressIndicator(
-              minHeight: 8,
-              value: achievement.progress,
-              backgroundColor: tint.withValues(alpha: 0.10),
-              valueColor: AlwaysStoppedAnimation<Color>(tint),
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${achievement.progressValue}/${achievement.targetValue} ${_targetLabel(achievement.targetType)}',
-            style: TextStyle(
-              color: tint,
-              fontSize: 12,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
@@ -540,52 +587,63 @@ class _MedalIconBadge extends StatelessWidget {
 }
 
 class _UnlockedAchievementTile extends StatelessWidget {
-  const _UnlockedAchievementTile({required this.achievement});
+  const _UnlockedAchievementTile({
+    required this.achievement,
+    required this.onTap,
+  });
 
   final AchievementModel achievement;
+  final VoidCallback onTap;
 
   @override
   Widget build(BuildContext context) {
     final tint = _tintForAchievement(achievement.targetType, true);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: tint.withValues(alpha: 0.14)),
-      ),
-      child: Row(
-        children: [
-          _MedalIconBadge(achievement: achievement, size: 52),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  achievement.name,
-                  style: const TextStyle(
-                    color: AppColors.darkBlue,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  achievement.achievedAt == null
-                      ? 'Unlocked'
-                      : 'Unlocked on ${_formatDate(achievement.achievedAt!)}',
-                  style: TextStyle(
-                    color: AppColors.darkBrown.withValues(alpha: 0.74),
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ],
-            ),
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: tint.withValues(alpha: 0.14)),
           ),
-          Icon(Icons.check_circle_rounded, color: tint),
-        ],
+          child: Row(
+            children: [
+              _MedalIconBadge(achievement: achievement, size: 52),
+              const SizedBox(width: 14),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      achievement.name,
+                      style: const TextStyle(
+                        color: AppColors.darkBlue,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      achievement.achievedAt == null
+                          ? 'Unlocked'
+                          : 'Unlocked on ${_formatDate(achievement.achievedAt!)}',
+                      style: TextStyle(
+                        color: AppColors.darkBrown.withValues(alpha: 0.74),
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              Icon(Icons.ios_share_rounded, color: tint),
+            ],
+          ),
+        ),
       ),
     );
   }
