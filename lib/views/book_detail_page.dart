@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 
 import '../core/constants/app_colors.dart';
 import '../data/models/book_detail_model.dart';
+import '../data/models/book_quote_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/book_detail_viewmodel.dart';
 import 'manual_add_book_page.dart';
@@ -79,7 +80,7 @@ class _BookDetailViewState extends State<_BookDetailView> {
     if (success) {
       _didChange = true;
       final detail = viewModel.detail;
-      await Navigator.push(
+      final didSaveSession = await Navigator.push<bool>(
         context,
         MaterialPageRoute(
           builder: (_) => ReadingPage(
@@ -93,6 +94,11 @@ class _BookDetailViewState extends State<_BookDetailView> {
           ),
         ),
       );
+
+      if (didSaveSession == true) {
+        _didChange = true;
+        await viewModel.loadDetail();
+      }
     } else if (viewModel.errorMessage != null) {
       ScaffoldMessenger.of(
         context,
@@ -120,10 +126,201 @@ class _BookDetailViewState extends State<_BookDetailView> {
     );
 
     if (created == true && context.mounted) {
+      _didChange = true;
+      await viewModel.loadDetail();
+      if (!context.mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Quote đã được thêm vào sách này.')),
       );
     }
+  }
+
+  Future<void> _openNoteEditor(
+    BuildContext context,
+    BookDetailViewModel viewModel,
+  ) async {
+    final detail = viewModel.detail;
+    if (detail == null) return;
+
+    final controller = TextEditingController(text: detail.note ?? '');
+
+    final saved = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Padding(
+          padding: EdgeInsets.only(
+            left: 16,
+            right: 16,
+            bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 16,
+          ),
+          child: StatefulBuilder(
+            builder: (context, setSheetState) {
+              final hasChanged =
+                  controller.text.trim() != (detail.note ?? '').trim();
+
+              return Container(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(28),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.edit_note_rounded,
+                          color: AppColors.accent,
+                        ),
+                        const SizedBox(width: 10),
+                        const Expanded(
+                          child: Text(
+                            'Save Note',
+                            style: TextStyle(
+                              color: AppColors.accent,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          onPressed: () => Navigator.pop(sheetContext, false),
+                          icon: const Icon(Icons.close_rounded),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: controller,
+                      maxLines: 8,
+                      autofocus: true,
+                      onChanged: (_) => setSheetState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'Viết note của bạn...',
+                        filled: true,
+                        fillColor: const Color(0xFFF7F7FB),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(22),
+                          borderSide: BorderSide.none,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: !hasChanged || viewModel.isSavingNote
+                            ? null
+                            : () async {
+                                final didSave = await viewModel.saveNote(
+                                  controller.text.trim(),
+                                );
+                                if (!context.mounted) return;
+                                if (didSave) {
+                                  Navigator.pop(sheetContext, true);
+                                } else {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                      content: Text('Không lưu được note.'),
+                                    ),
+                                  );
+                                }
+                              },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.accent,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 16),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(18),
+                          ),
+                        ),
+                        child: Text(
+                          viewModel.isSavingNote ? 'Đang lưu...' : 'Save',
+                          style: const TextStyle(fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+
+    controller.dispose();
+
+    if (saved == true) {
+      _didChange = true;
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Đã lưu note.')));
+    }
+  }
+
+  Future<void> _showAllQuotes(
+    BuildContext context,
+    List<BookQuoteModel> quotes,
+  ) async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Tất cả quote',
+              style: TextStyle(
+                color: AppColors.darkBlue,
+                fontSize: 22,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: quotes.length,
+                separatorBuilder: (context, index) =>
+                    const SizedBox(height: 12),
+                itemBuilder: (context, index) {
+                  final quote = quotes[index];
+                  return Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFF7F7FB),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      quote.content,
+                      style: TextStyle(
+                        color: AppColors.darkBrown.withValues(alpha: 0.86),
+                        fontWeight: FontWeight.w600,
+                        height: 1.5,
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _handleBack() {
@@ -167,6 +364,8 @@ class _BookDetailViewState extends State<_BookDetailView> {
               }
 
               final detail = viewModel.detail;
+              final quotes = viewModel.quotes;
+              final latestQuote = quotes.isEmpty ? null : quotes.first;
               if (detail == null) {
                 return const SizedBox.shrink();
               }
@@ -255,30 +454,38 @@ class _BookDetailViewState extends State<_BookDetailView> {
                       ),
                     ),
                     const SizedBox(height: 24),
-                    _DetailBlock(
-                      title: 'Ghi chú',
-                      trailing:
-                          detail.note == null || detail.note!.trim().isEmpty
-                          ? null
-                          : const _NoteTag(label: 'Note'),
-                      child: Text(
-                        (detail.note == null || detail.note!.trim().isEmpty)
-                            ? 'Chưa có ghi chú cho cuốn sách này.'
-                            : detail.note!,
-                        style: TextStyle(
-                          color: AppColors.darkBrown.withValues(alpha: 0.84),
-                          fontSize: 15,
-                          height: 1.6,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
+                    _InsightCard(
+                      title: 'Quote',
+                      icon: Icons.format_quote_rounded,
+                      accentColor: const Color(0xFF2196F3),
+                      content: latestQuote?.content.trim().isNotEmpty == true
+                          ? latestQuote!.content
+                          : 'Chưa có quote nào cho cuốn sách này.',
+                      actionLabel: quotes.length > 1 ? 'Hiển thị thêm' : null,
+                      onActionTap: quotes.length > 1
+                          ? () => _showAllQuotes(context, quotes)
+                          : null,
+                      onAddTap: () => _openQuoteScanner(context, viewModel),
+                    ),
+                    const SizedBox(height: 20),
+                    _InsightCard(
+                      title: 'Note',
+                      icon: Icons.edit_note_rounded,
+                      accentColor: const Color(0xFFFFC107),
+                      content: detail.note?.trim().isNotEmpty == true
+                          ? detail.note!
+                          : 'Chưa có note nào cho cuốn sách này.',
+                      actionLabel: detail.note?.trim().isNotEmpty == true
+                          ? 'Chỉnh sửa'
+                          : null,
+                      onActionTap: () => _openNoteEditor(context, viewModel),
+                      onAddTap: () => _openNoteEditor(context, viewModel),
                     ),
                     if (detail.description != null &&
                         detail.description!.trim().isNotEmpty) ...[
                       const SizedBox(height: 24),
                       _DetailBlock(
                         title: 'Mô tả',
-                        trailing: const _NoteTag(label: 'Quotes'),
                         child: Text(
                           detail.description!,
                           style: TextStyle(
@@ -382,11 +589,10 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _DetailBlock extends StatelessWidget {
-  const _DetailBlock({required this.title, required this.child, this.trailing});
+  const _DetailBlock({required this.title, required this.child});
 
   final String title;
   final Widget child;
-  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -404,7 +610,6 @@ class _DetailBlock extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            ...?trailing == null ? null : [trailing!],
           ],
         ),
         const SizedBox(height: 12),
@@ -554,26 +759,110 @@ class _RatingRow extends StatelessWidget {
   }
 }
 
-class _NoteTag extends StatelessWidget {
-  const _NoteTag({required this.label});
+class _InsightCard extends StatelessWidget {
+  const _InsightCard({
+    required this.title,
+    required this.icon,
+    required this.accentColor,
+    required this.content,
+    required this.onAddTap,
+    this.actionLabel,
+    this.onActionTap,
+  });
 
-  final String label;
+  final String title;
+  final IconData icon;
+  final Color accentColor;
+  final String content;
+  final VoidCallback onAddTap;
+  final String? actionLabel;
+  final VoidCallback? onActionTap;
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 18),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: Colors.grey.shade300, width: 0.7),
+        borderRadius: BorderRadius.circular(28),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.08),
+            blurRadius: 18,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: AppColors.darkBlue,
-          fontWeight: FontWeight.w700,
-        ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: AppColors.accent),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.accent,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              if (actionLabel != null && onActionTap != null)
+                TextButton(
+                  onPressed: onActionTap,
+                  child: Text(
+                    actionLabel!,
+                    style: const TextStyle(
+                      color: AppColors.accent,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+              IconButton(
+                onPressed: onAddTap,
+                icon: const Icon(Icons.add_rounded, color: AppColors.accent),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.fromLTRB(18, 22, 18, 22),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF7F7FB),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Container(
+                  width: 6,
+                  height: 98,
+                  decoration: BoxDecoration(
+                    color: accentColor,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Text(
+                    content,
+                    style: TextStyle(
+                      color: AppColors.darkBrown.withValues(alpha: 0.86),
+                      fontSize: 16,
+                      height: 1.55,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

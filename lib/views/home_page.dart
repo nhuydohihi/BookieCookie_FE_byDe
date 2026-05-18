@@ -75,11 +75,11 @@ class _HomePageView extends StatelessWidget {
       case AddBookAction.scanIsbn:
         final GoogleBookSearchResult? scannedBook =
             await Navigator.push<GoogleBookSearchResult>(
-          context,
-          MaterialPageRoute(
-            builder: (_) => BarcodeScanPage(user: user, token: token),
-          ),
-        );
+              context,
+              MaterialPageRoute(
+                builder: (_) => BarcodeScanPage(user: user, token: token),
+              ),
+            );
         if (!context.mounted || scannedBook == null) {
           break;
         }
@@ -156,10 +156,13 @@ class _HomePageView extends StatelessWidget {
     }
   }
 
-  void _openReading(BuildContext context, List<CurrentReadingBook> books) {
+  Future<void> _openReading(
+    BuildContext context,
+    List<CurrentReadingBook> books,
+  ) async {
     final currentBook = books.isNotEmpty ? books.first : null;
 
-    Navigator.push(
+    final didSaveSession = await Navigator.push<bool>(
       context,
       MaterialPageRoute(
         builder: (_) => ReadingPage(
@@ -172,6 +175,10 @@ class _HomePageView extends StatelessWidget {
         ),
       ),
     );
+
+    if (didSaveSession == true && context.mounted) {
+      await context.read<HomeViewModel>().loadDashboard();
+    }
   }
 
   @override
