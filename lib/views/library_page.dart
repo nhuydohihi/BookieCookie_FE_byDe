@@ -2,15 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../core/constants/app_colors.dart';
+import '../data/models/google_book_search_result.dart';
 import '../data/models/library_book_model.dart';
 import '../data/models/user_model.dart';
 import '../viewmodels/library_viewmodel.dart';
 import 'account_page.dart';
+import 'barcode_scan_page.dart';
 import 'book_detail_page.dart';
 import 'challenge_page.dart';
 import 'home_page.dart';
 import 'manual_add_book_page.dart';
 import 'statistic_page.dart';
+import 'widgets/add_book_menu_button.dart';
 import 'widgets/app_bottom_bar.dart';
 
 class LibraryPage extends StatelessWidget {
@@ -41,6 +44,7 @@ class _LibraryPageView extends StatefulWidget {
 class _LibraryPageViewState extends State<_LibraryPageView> {
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
+  String _selectedStatus = _libraryStatusFilters.first.value;
 
   @override
   void dispose() {
@@ -48,20 +52,71 @@ class _LibraryPageViewState extends State<_LibraryPageView> {
     super.dispose();
   }
 
-  Future<void> _openAddBook(
+  Future<void> _handleAddBookAction(
     BuildContext context,
     LibraryViewModel libraryVM,
+    AddBookAction action,
   ) async {
-    final created = await Navigator.push<bool>(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            ManualAddBookPage(user: widget.user, token: widget.token),
-      ),
-    );
+    switch (action) {
+      case AddBookAction.manual:
+        final created = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) =>
+                ManualAddBookPage(user: widget.user, token: widget.token),
+          ),
+        );
 
-    if (created == true) {
-      await libraryVM.loadLibrary();
+        if (created == true) {
+          await libraryVM.loadLibrary();
+        }
+        break;
+      case AddBookAction.searchOnline:
+        final created = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ManualAddBookPage(
+              user: widget.user,
+              token: widget.token,
+              initialMode: AddBookMode.searchOnline,
+            ),
+          ),
+        );
+
+        if (created == true) {
+          await libraryVM.loadLibrary();
+        }
+        break;
+      case AddBookAction.scanIsbn:
+        final GoogleBookSearchResult? scannedBook =
+            await Navigator.push<GoogleBookSearchResult>(
+              context,
+              MaterialPageRoute(
+                builder: (_) =>
+                    BarcodeScanPage(user: widget.user, token: widget.token),
+              ),
+            );
+
+        if (!context.mounted || scannedBook == null) {
+          break;
+        }
+
+        final created = await Navigator.push<bool>(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ManualAddBookPage(
+              user: widget.user,
+              token: widget.token,
+              initialMode: AddBookMode.manual,
+              initialSearchResult: scannedBook,
+            ),
+          ),
+        );
+
+        if (created == true) {
+          await libraryVM.loadLibrary();
+        }
+        break;
     }
   }
 
@@ -81,7 +136,8 @@ class _LibraryPageViewState extends State<_LibraryPageView> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => ChallengePage(user: widget.user, token: widget.token),
+            builder: (_) =>
+                ChallengePage(user: widget.user, token: widget.token),
           ),
         );
         break;
@@ -89,7 +145,8 @@ class _LibraryPageViewState extends State<_LibraryPageView> {
         Navigator.pushReplacement(
           context,
           MaterialPageRoute(
-            builder: (_) => StatisticPage(user: widget.user, token: widget.token),
+            builder: (_) =>
+                StatisticPage(user: widget.user, token: widget.token),
           ),
         );
         break;
@@ -130,10 +187,15 @@ class _LibraryPageViewState extends State<_LibraryPageView> {
           builder: (context, libraryVM, _) {
             final filteredBooks = libraryVM.books.where((book) {
               final query = _searchQuery.trim().toLowerCase();
-              if (query.isEmpty) return true;
+              final matchesStatus =
+                  _selectedStatus == 'all' || book.status == _selectedStatus;
+              if (query.isEmpty) return matchesStatus;
 
-              return book.title.toLowerCase().contains(query) ||
+              final matchesQuery =
+                  book.title.toLowerCase().contains(query) ||
                   book.author.toLowerCase().contains(query);
+
+              return matchesStatus && matchesQuery;
             }).toList();
 
             return RefreshIndicator(
@@ -153,7 +215,15 @@ class _LibraryPageViewState extends State<_LibraryPageView> {
                               _searchQuery = value;
                             });
                           },
-                          onAddTap: () => _openAddBook(context, libraryVM),
+                          selectedStatus: _selectedStatus,
+                          statusOptions: _libraryStatusFilters,
+                          onStatusSelected: (value) {
+                            setState(() {
+                              _selectedStatus = value;
+                            });
+                          },
+                          onAddBookSelected: (action) =>
+                              _handleAddBookAction(context, libraryVM, action),
                         ),
                         const SizedBox(height: 24),
                         _LibrarySummary(
@@ -222,12 +292,18 @@ class _LibraryHeader extends StatelessWidget {
   const _LibraryHeader({
     required this.controller,
     required this.onChanged,
-    required this.onAddTap,
+    required this.selectedStatus,
+    required this.statusOptions,
+    required this.onStatusSelected,
+    required this.onAddBookSelected,
   });
 
   final TextEditingController controller;
   final ValueChanged<String> onChanged;
-  final VoidCallback onAddTap;
+  final String selectedStatus;
+  final List<_LibraryStatusFilter> statusOptions;
+  final ValueChanged<String> onStatusSelected;
+  final ValueChanged<AddBookAction> onAddBookSelected;
 
   @override
   Widget build(BuildContext context) {
@@ -244,32 +320,7 @@ class _LibraryHeader extends StatelessWidget {
               ),
             ),
             const Spacer(),
-            Material(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(18),
-              child: InkWell(
-                onTap: onAddTap,
-                borderRadius: BorderRadius.circular(18),
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(18),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 12,
-                        offset: const Offset(0, 6),
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.add_rounded,
-                    color: AppColors.darkBlue,
-                  ),
-                ),
-              ),
-            ),
+            AddBookMenuButton(onSelected: onAddBookSelected),
           ],
         ),
         const SizedBox(height: 18),
@@ -302,6 +353,44 @@ class _LibraryHeader extends StatelessWidget {
               borderRadius: BorderRadius.all(Radius.circular(999)),
               borderSide: BorderSide(color: AppColors.primary, width: 1.4),
             ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        SizedBox(
+          height: 38,
+          child: ListView.separated(
+            scrollDirection: Axis.horizontal,
+            itemCount: statusOptions.length,
+            separatorBuilder: (_, index) => const SizedBox(width: 10),
+            itemBuilder: (context, index) {
+              final option = statusOptions[index];
+              final isSelected = option.value == selectedStatus;
+
+              return ChoiceChip(
+                label: Text(option.label),
+                selected: isSelected,
+                onSelected: (_) => onStatusSelected(option.value),
+                labelStyle: TextStyle(
+                  color: isSelected ? Colors.white : AppColors.primary,
+                  fontWeight: FontWeight.w700,
+                ),
+                backgroundColor: Colors.white,
+                selectedColor: AppColors.primary,
+                side: BorderSide(
+                  color: isSelected
+                      ? AppColors.primary
+                      : AppColors.primary.withValues(alpha: 0.16),
+                ),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                showCheckmark: false,
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 8,
+                ),
+              );
+            },
           ),
         ),
       ],
@@ -379,7 +468,8 @@ class _LibraryBookCard extends StatelessWidget {
                     width: double.infinity,
                     color: AppColors.cream,
                     child:
-                        book.coverImageUrl != null && book.coverImageUrl!.isNotEmpty
+                        book.coverImageUrl != null &&
+                            book.coverImageUrl!.isNotEmpty
                         ? Padding(
                             padding: const EdgeInsets.all(10),
                             child: Image.network(
@@ -421,12 +511,11 @@ class _LibraryBookCard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(height: 10),
-                    Row(
-                      children: [
-                        _StatusChip(label: _statusLabel(book.status)),
-                        const Spacer(),
-                        _RatingStars(rating: book.rating ?? 0),
-                      ],
+                    _RatingStars(rating: book.rating ?? 0),
+                    const SizedBox(height: 10),
+                    _StatusChip(
+                      label: _statusLabel(book.status),
+                      color: _statusColor(book.status),
                     ),
                   ],
                 ),
@@ -497,22 +586,23 @@ class _LibraryBookFallback extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.label});
+  const _StatusChip({required this.label, required this.color});
 
   final String label;
+  final Color color;
 
   @override
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(
-        color: AppColors.primary.withValues(alpha: 0.12),
+        color: color.withValues(alpha: 0.14),
         borderRadius: BorderRadius.circular(999),
       ),
       child: Text(
         label,
-        style: const TextStyle(
-          color: AppColors.primary,
+        style: TextStyle(
+          color: color,
           fontSize: 11,
           fontWeight: FontWeight.w800,
         ),
@@ -530,8 +620,8 @@ class _RatingStars extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
-      children: List.generate(3, (index) {
-        final filled = index < rating.clamp(0, 3);
+      children: List.generate(5, (index) {
+        final filled = index < rating.clamp(0, 5);
         return Padding(
           padding: const EdgeInsets.only(left: 2),
           child: Icon(
@@ -585,3 +675,31 @@ String _statusLabel(String status) {
       return 'Planned';
   }
 }
+
+Color _statusColor(String status) {
+  switch (status) {
+    case 'reading':
+      return const Color(0xFFE0A106);
+    case 'finished':
+      return const Color(0xFF2E9B50);
+    case 'abandoned':
+      return const Color(0xFF8A9099);
+    default:
+      return const Color(0xFF2F80ED);
+  }
+}
+
+class _LibraryStatusFilter {
+  const _LibraryStatusFilter({required this.value, required this.label});
+
+  final String value;
+  final String label;
+}
+
+const List<_LibraryStatusFilter> _libraryStatusFilters = [
+  _LibraryStatusFilter(value: 'all', label: 'All'),
+  _LibraryStatusFilter(value: 'plan_to_read', label: 'Planned'),
+  _LibraryStatusFilter(value: 'reading', label: 'Reading'),
+  _LibraryStatusFilter(value: 'finished', label: 'Finished'),
+  _LibraryStatusFilter(value: 'abandoned', label: 'Dropped'),
+];

@@ -9,7 +9,6 @@ class BookDetailModel {
     this.coverImageUrl,
     this.rating,
     this.note,
-    this.readingYear,
     this.startDate,
     this.finishDate,
     this.category,
@@ -27,7 +26,6 @@ class BookDetailModel {
   final String? coverImageUrl;
   final int? rating;
   final String? note;
-  final int? readingYear;
   final String? startDate;
   final String? finishDate;
   final String? category;
@@ -51,7 +49,6 @@ class BookDetailModel {
       coverImageUrl: json['cover_image_url'] as String?,
       rating: parseInt(json['rating']),
       note: json['note'] as String?,
-      readingYear: parseInt(json['reading_year']),
       startDate: json['start_date'] as String?,
       finishDate: json['finish_date'] as String?,
       category: json['category'] as String?,

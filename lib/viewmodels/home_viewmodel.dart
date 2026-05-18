@@ -104,6 +104,7 @@ class HomeViewModel extends ChangeNotifier {
               year: YearStatistics(
                 readingHours: currentYearStats.readingHours,
                 readingMinutes: currentYearStats.readingMinutes,
+                readingSeconds: currentYearStats.readingSeconds,
                 booksFinished: currentYearStats.booksFinished,
                 quotesSaved: currentYearStats.quotesSaved,
                 currentReadingCount: currentYearStats.currentReadingCount,

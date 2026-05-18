@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../core/constants/app_colors.dart';
 import '../core/services/api_service.dart';
+import 'note_scan_page.dart';
 
 class ReadingPage extends StatefulWidget {
   const ReadingPage({
@@ -41,11 +42,18 @@ class _ReadingPageState extends State<ReadingPage> {
   FixedExtentScrollController? _timeController;
   late int _selectedMinutes;
   late int _remainingSeconds;
+  late int _elapsedStopwatchSeconds;
   bool _isReading = false;
   bool _isSavingSession = false;
+  bool _isScanningNote = false;
+  bool _isExiting = false;
+  bool _allowPagePop = false;
   Timer? _countdownTimer;
+  _ReadingMode _readingMode = _ReadingMode.timer;
   final ApiService _apiService = ApiService();
   int _syncedElapsedSeconds = 0;
+  bool _isLoadingSessions = false;
+  List<_ReadingSession> _readingSessions = const [];
 
   int get _itemCount => (_maxMinutes - _minMinutes) ~/ _minuteStep + 1;
   int get _selectedIndex => (_selectedMinutes - _minMinutes) ~/ _minuteStep;
@@ -56,8 +64,10 @@ class _ReadingPageState extends State<ReadingPage> {
     _selectedMinutes =
         (widget.initialMinutes.clamp(_minMinutes, _maxMinutes) as num).toInt();
     _remainingSeconds = _selectedMinutes * 60;
+    _elapsedStopwatchSeconds = 0;
     _noteController = TextEditingController(text: widget.initialNote ?? '');
     _ensureTimeController();
+    unawaited(_loadReadingSessions());
   }
 
   @override
@@ -75,6 +85,18 @@ class _ReadingPageState extends State<ReadingPage> {
   }
 
   Future<void> _toggleReading() async {
+    if (_isReading && _readingMode == _ReadingMode.stopwatch) {
+      _countdownTimer?.cancel();
+      setState(() {
+        _isReading = false;
+      });
+      final didSave = await _syncCurrentProgress(finalize: true);
+      if (didSave || _elapsedStopwatchSeconds <= 0) {
+        _resetStopwatch();
+      }
+      return;
+    }
+
     if (_isReading) {
       _countdownTimer?.cancel();
       setState(() {
@@ -85,7 +107,8 @@ class _ReadingPageState extends State<ReadingPage> {
     }
 
     final totalSeconds = _selectedMinutes * 60;
-    if (_remainingSeconds <= 0 || _remainingSeconds > totalSeconds) {
+    if (_readingMode == _ReadingMode.timer &&
+        (_remainingSeconds <= 0 || _remainingSeconds > totalSeconds)) {
       _remainingSeconds = totalSeconds;
       _syncedElapsedSeconds = 0;
     }
@@ -101,19 +124,37 @@ class _ReadingPageState extends State<ReadingPage> {
         return;
       }
 
-      if (_remainingSeconds <= 1) {
-        timer.cancel();
-        setState(() {
-          _remainingSeconds = 0;
-          _isReading = false;
-        });
-        unawaited(_syncCurrentProgress(finalize: true));
-        return;
-      }
-
       setState(() {
-        _remainingSeconds -= 1;
+        if (_readingMode == _ReadingMode.timer) {
+          if (_remainingSeconds <= 1) {
+            _remainingSeconds = 0;
+            _isReading = false;
+          } else {
+            _remainingSeconds -= 1;
+          }
+          return;
+        }
+
+        _elapsedStopwatchSeconds += 1;
       });
+
+      if (_readingMode == _ReadingMode.timer && !_isReading) {
+        timer.cancel();
+        unawaited(_syncCurrentProgress(finalize: true));
+      }
+    });
+  }
+
+  void _resetStopwatch() {
+    if (!mounted) {
+      _elapsedStopwatchSeconds = 0;
+      _syncedElapsedSeconds = 0;
+      return;
+    }
+
+    setState(() {
+      _elapsedStopwatchSeconds = 0;
+      _syncedElapsedSeconds = 0;
     });
   }
 
@@ -130,20 +171,55 @@ class _ReadingPageState extends State<ReadingPage> {
     setState(() {
       _selectedMinutes = nextMinutes;
       _remainingSeconds = nextMinutes * 60;
+      _elapsedStopwatchSeconds = 0;
+      _syncedElapsedSeconds = 0;
+    });
+  }
+
+  Future<void> _handleModeChanged(_ReadingMode mode) async {
+    if (mode == _readingMode || _isReading || _isSavingSession) {
+      return;
+    }
+
+    setState(() {
+      _readingMode = mode;
+      _remainingSeconds = _selectedMinutes * 60;
+      _elapsedStopwatchSeconds = 0;
       _syncedElapsedSeconds = 0;
     });
   }
 
   int get _elapsedSeconds {
+    if (_readingMode == _ReadingMode.stopwatch) {
+      return _elapsedStopwatchSeconds;
+    }
+
     final totalSeconds = _selectedMinutes * 60;
     return (totalSeconds - _remainingSeconds).clamp(0, totalSeconds);
   }
 
-  Future<void> _syncCurrentProgress({required bool finalize}) async {
-    if (_isSavingSession) {
-      return;
-    }
+  int get _liveUnsyncedSeconds =>
+      math.max(_elapsedSeconds - _syncedElapsedSeconds, 0);
 
+  int get _todayReadingSeconds {
+    final now = DateTime.now();
+    final persistedSeconds = _readingSessions
+        .where((session) => _isSameDay(session.createdAt, now))
+        .fold<int>(0, (sum, session) => sum + session.durationSeconds);
+
+    return persistedSeconds + _liveUnsyncedSeconds;
+  }
+
+  int get _totalReadingSeconds {
+    final persistedSeconds = _readingSessions.fold<int>(
+      0,
+      (sum, session) => sum + session.durationSeconds,
+    );
+
+    return persistedSeconds + _liveUnsyncedSeconds;
+  }
+
+  Future<void> _loadReadingSessions() async {
     final userId = widget.userId;
     final userBookId = widget.userBookId;
 
@@ -151,17 +227,117 @@ class _ReadingPageState extends State<ReadingPage> {
       return;
     }
 
-    final unsavedSeconds = _elapsedSeconds - _syncedElapsedSeconds;
-    if (unsavedSeconds <= 0) {
+    setState(() {
+      _isLoadingSessions = true;
+    });
+
+    try {
+      final response = await _apiService.get(
+        '/user-books/$userBookId/reading-sessions?userId=$userId',
+        headers: widget.token == null
+            ? null
+            : {'Authorization': 'Bearer ${widget.token}'},
+      );
+
+      final rawData = response['data'];
+      final sessions = rawData is List
+          ? rawData
+                .whereType<Map>()
+                .map(
+                  (item) =>
+                      _ReadingSession.fromJson(Map<String, dynamic>.from(item)),
+                )
+                .toList()
+          : <_ReadingSession>[];
+
+      if (!mounted) {
+        _readingSessions = sessions;
+        _isLoadingSessions = false;
+        return;
+      }
+
+      setState(() {
+        _readingSessions = sessions;
+        _isLoadingSessions = false;
+      });
+    } catch (_) {
+      if (!mounted) {
+        _isLoadingSessions = false;
+        return;
+      }
+
+      setState(() {
+        _isLoadingSessions = false;
+      });
+    }
+  }
+
+  Future<void> _openNoteScanner() async {
+    if (_isScanningNote) {
       return;
     }
 
-    final durationMinutes = finalize
-        ? (unsavedSeconds / 60).ceil()
-        : (unsavedSeconds ~/ 60);
+    setState(() {
+      _isScanningNote = true;
+    });
 
-    if (durationMinutes <= 0) {
-      return;
+    try {
+      final scannedText = await Navigator.push<String>(
+        context,
+        MaterialPageRoute(builder: (_) => const NoteScanPage()),
+      );
+
+      if (!mounted || scannedText == null || scannedText.trim().isEmpty) {
+        return;
+      }
+
+      final currentNote = _noteController.text.trim();
+      final nextNote = currentNote.isEmpty
+          ? scannedText.trim()
+          : '$currentNote\n\n${scannedText.trim()}';
+
+      setState(() {
+        _noteController.text = nextNote;
+        _noteController.selection = TextSelection.collapsed(
+          offset: _noteController.text.length,
+        );
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Đã thêm nội dung OCR vào ghi chú.')),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isScanningNote = false;
+        });
+      } else {
+        _isScanningNote = false;
+      }
+    }
+  }
+
+  Future<bool> _syncCurrentProgress({required bool finalize}) async {
+    if (_isSavingSession) {
+      return false;
+    }
+
+    final userId = widget.userId;
+    final userBookId = widget.userBookId;
+
+    if (userId == null || userBookId == null) {
+      return false;
+    }
+
+    final unsavedSeconds = _elapsedSeconds - _syncedElapsedSeconds;
+    if (unsavedSeconds <= 0) {
+      return false;
+    }
+
+    final durationSeconds = unsavedSeconds;
+
+    if (durationSeconds <= 0) {
+      return false;
     }
 
     if (mounted) {
@@ -173,11 +349,11 @@ class _ReadingPageState extends State<ReadingPage> {
     }
 
     try {
-      await _apiService.post(
+      final response = await _apiService.post(
         '/user-books/$userBookId/reading-sessions',
         {
           'user_id': userId,
-          'duration_minutes': durationMinutes,
+          'duration_seconds': durationSeconds,
           'pages_read': 0,
         },
         headers: widget.token == null
@@ -185,21 +361,29 @@ class _ReadingPageState extends State<ReadingPage> {
             : {'Authorization': 'Bearer ${widget.token}'},
       );
 
+      final rawSession = response['data'];
+      if (rawSession is Map) {
+        final session = _ReadingSession.fromJson(
+          Map<String, dynamic>.from(rawSession),
+        );
+        _readingSessions = [session, ..._readingSessions];
+      }
+
       if (finalize) {
         _syncedElapsedSeconds = _elapsedSeconds;
       } else {
-        _syncedElapsedSeconds += durationMinutes * 60;
+        _syncedElapsedSeconds += durationSeconds;
       }
+      return true;
     } catch (_) {
       if (!mounted) {
-        return;
+        return false;
       }
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Không lưu được phiên đọc lên server.'),
-        ),
+        const SnackBar(content: Text('Không lưu được phiên đọc lên server.')),
       );
+      return false;
     } finally {
       if (mounted) {
         setState(() {
@@ -212,9 +396,11 @@ class _ReadingPageState extends State<ReadingPage> {
   }
 
   Future<void> _handleExit() async {
-    if (_isSavingSession) {
+    if (_isSavingSession || _isExiting) {
       return;
     }
+
+    _isExiting = true;
 
     _countdownTimer?.cancel();
 
@@ -230,10 +416,24 @@ class _ReadingPageState extends State<ReadingPage> {
       return;
     }
 
-    Navigator.pop(context);
+    setState(() {
+      _allowPagePop = true;
+    });
+
+    Navigator.of(context).pop();
   }
 
   double get _progressValue {
+    if (_readingMode == _ReadingMode.stopwatch) {
+      final totalSeconds = _selectedMinutes * 60;
+      if (totalSeconds <= 0) {
+        return 0.0;
+      }
+
+      return ((_elapsedStopwatchSeconds / totalSeconds).clamp(0.0, 1.0) as num)
+          .toDouble();
+    }
+
     if (!_isReading) {
       return 1.0;
     }
@@ -248,9 +448,10 @@ class _ReadingPageState extends State<ReadingPage> {
   }
 
   String get _centerLabel {
-    final totalSeconds = _isReading ? _remainingSeconds : _selectedMinutes * 60;
-    final safeSeconds = (totalSeconds.clamp(0, _maxMinutes * 60) as num)
-        .toInt();
+    final totalSeconds = _readingMode == _ReadingMode.stopwatch
+        ? _elapsedStopwatchSeconds
+        : (_isReading ? _remainingSeconds : _selectedMinutes * 60);
+    final safeSeconds = math.max(totalSeconds, 0);
     final minutes = (safeSeconds ~/ 60).toString().padLeft(2, '0');
     final seconds = (safeSeconds % 60).toString().padLeft(2, '0');
     return '$minutes:$seconds';
@@ -266,9 +467,9 @@ class _ReadingPageState extends State<ReadingPage> {
         : 'Focus session';
 
     return PopScope(
-      canPop: false,
+      canPop: _allowPagePop,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) {
+        if (!didPop && !_isExiting) {
           unawaited(_handleExit());
         }
       },
@@ -308,6 +509,14 @@ class _ReadingPageState extends State<ReadingPage> {
                 ),
                 const SizedBox(height: 28),
                 Center(
+                  child: _ReadingModeToggle(
+                    mode: _readingMode,
+                    isEnabled: !_isReading && !_isSavingSession,
+                    onChanged: _handleModeChanged,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Center(
                   child: _ReadingDial(
                     centerLabel: _centerLabel,
                     progressValue: _progressValue,
@@ -335,7 +544,13 @@ class _ReadingPageState extends State<ReadingPage> {
                       elevation: 0,
                     ),
                     child: Text(
-                      _isReading ? 'Pause reading' : 'Start reading',
+                      _isReading
+                          ? (_readingMode == _ReadingMode.timer
+                                ? 'Pause timer'
+                                : 'End stopwatch')
+                          : (_readingMode == _ReadingMode.timer
+                                ? 'Start timer'
+                                : 'Start stopwatch'),
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w800,
@@ -350,45 +565,105 @@ class _ReadingPageState extends State<ReadingPage> {
                 ),
                 const SizedBox(height: 24),
                 _InfoCard(
-                  title: 'Thời gian đọc hôm nay',
-                  child: Row(
+                  title: 'Thời gian đọc',
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          _isReading
-                              ? 'Còn lại $_centerLabel'
-                              : '$_selectedMinutes phút',
-                          style: const TextStyle(
-                            color: AppColors.darkBlue,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                          ),
-                        ),
-                      ),
-                      if (_isReading)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: AppColors.primary.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: const Text(
-                            'Đang đọc',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontWeight: FontWeight.w700,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Hôm nay',
+                                  style: TextStyle(
+                                    color: AppColors.darkBrown.withValues(
+                                      alpha: 0.74,
+                                    ),
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _isLoadingSessions
+                                      ? 'Đang tải...'
+                                      : _formatDuration(_todayReadingSeconds),
+                                  style: const TextStyle(
+                                    color: AppColors.darkBlue,
+                                    fontSize: 24,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
+                          if (_isReading)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.12,
+                                ),
+                                borderRadius: BorderRadius.circular(999),
+                              ),
+                              child: const Text(
+                                'Đang đọc',
+                                style: TextStyle(
+                                  color: AppColors.primary,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        height: 1,
+                        color: AppColors.primary.withValues(alpha: 0.12),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Tổng của cuốn sách',
+                        style: TextStyle(
+                          color: AppColors.darkBrown.withValues(alpha: 0.74),
+                          fontSize: 13,
+                          fontWeight: FontWeight.w700,
                         ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        _isLoadingSessions
+                            ? 'Đang tải...'
+                            : _formatDuration(_totalReadingSeconds),
+                        style: const TextStyle(
+                          color: AppColors.darkBlue,
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ],
                   ),
                 ),
                 const SizedBox(height: 18),
                 _InfoCard(
                   title: 'Ghi chú',
+                  trailing: Tooltip(
+                    message: _isScanningNote
+                        ? 'Đang quét ảnh...'
+                        : 'OCR từ ảnh',
+                    child: _CardActionButton(
+                      icon: _isScanningNote
+                          ? Icons.hourglass_top_rounded
+                          : Icons.camera_alt_rounded,
+                      onTap: _isScanningNote ? null : _openNoteScanner,
+                    ),
+                  ),
                   child: TextField(
                     controller: _noteController,
                     maxLines: 6,
@@ -608,6 +883,108 @@ class _ReadingDial extends StatelessWidget {
   }
 }
 
+class _ReadingModeToggle extends StatelessWidget {
+  const _ReadingModeToggle({
+    required this.mode,
+    required this.isEnabled,
+    required this.onChanged,
+  });
+
+  final _ReadingMode mode;
+  final bool isEnabled;
+  final ValueChanged<_ReadingMode> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(999),
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.08),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ModeIconButton(
+            icon: Icons.hourglass_top_rounded,
+            isSelected: mode == _ReadingMode.timer,
+            isEnabled: isEnabled,
+            tooltip: 'Timer',
+            onTap: () => onChanged(_ReadingMode.timer),
+          ),
+          const SizedBox(width: 6),
+          _ModeIconButton(
+            icon: Icons.timer_outlined,
+            isSelected: mode == _ReadingMode.stopwatch,
+            isEnabled: isEnabled,
+            tooltip: 'Stopwatch',
+            onTap: () => onChanged(_ReadingMode.stopwatch),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ModeIconButton extends StatelessWidget {
+  const _ModeIconButton({
+    required this.icon,
+    required this.isSelected,
+    required this.isEnabled,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  final IconData icon;
+  final bool isSelected;
+  final bool isEnabled;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: isSelected
+            ? AppColors.primary.withValues(alpha: 0.14)
+            : Colors.transparent,
+        borderRadius: BorderRadius.circular(999),
+        child: InkWell(
+          onTap: isEnabled ? onTap : null,
+          borderRadius: BorderRadius.circular(999),
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(
+                color: isSelected
+                    ? AppColors.primary.withValues(alpha: 0.24)
+                    : AppColors.primary.withValues(alpha: 0.08),
+              ),
+            ),
+            child: Icon(
+              icon,
+              size: 18,
+              color: isEnabled
+                  ? (isSelected ? AppColors.primary : AppColors.darkBrown)
+                  : AppColors.darkBrown.withValues(alpha: 0.32),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DialPainter extends CustomPainter {
   const _DialPainter({required this.progressValue});
 
@@ -644,10 +1021,11 @@ class _DialPainter extends CustomPainter {
 }
 
 class _InfoCard extends StatelessWidget {
-  const _InfoCard({required this.title, required this.child});
+  const _InfoCard({required this.title, required this.child, this.trailing});
 
   final String title;
   final Widget child;
+  final Widget? trailing;
 
   @override
   Widget build(BuildContext context) {
@@ -668,17 +1046,54 @@ class _InfoCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: AppColors.darkBlue,
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  title,
+                  style: const TextStyle(
+                    color: AppColors.darkBlue,
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              ...?trailing == null ? null : <Widget>[trailing!],
+            ],
           ),
           const SizedBox(height: 12),
           child,
         ],
+      ),
+    );
+  }
+}
+
+class _CardActionButton extends StatelessWidget {
+  const _CardActionButton({required this.icon, required this.onTap});
+
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: AppColors.primary.withValues(alpha: 0.10),
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: 36,
+          height: 36,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.14),
+            ),
+          ),
+          child: Icon(icon, size: 18, color: AppColors.primary),
+        ),
       ),
     );
   }
@@ -744,4 +1159,59 @@ class _CoverPlaceholder extends StatelessWidget {
       ),
     );
   }
+}
+
+class _ReadingSession {
+  const _ReadingSession({
+    required this.durationSeconds,
+    required this.createdAt,
+  });
+
+  final int durationSeconds;
+  final DateTime createdAt;
+
+  factory _ReadingSession.fromJson(Map<String, dynamic> json) {
+    final parsedDurationSeconds = json['duration_seconds'] is num
+        ? (json['duration_seconds'] as num).toInt()
+        : ((json['duration_minutes'] as num?)?.toInt() ?? 0) * 60;
+
+    return _ReadingSession(
+      durationSeconds: parsedDurationSeconds,
+      createdAt:
+          DateTime.tryParse('${json['created_at'] ?? ''}') ?? DateTime.now(),
+    );
+  }
+}
+
+bool _isSameDay(DateTime left, DateTime right) {
+  return left.year == right.year &&
+      left.month == right.month &&
+      left.day == right.day;
+}
+
+enum _ReadingMode { timer, stopwatch }
+
+String _formatDuration(int totalSeconds) {
+  final safeSeconds = math.max(totalSeconds, 0);
+  final hours = safeSeconds ~/ 3600;
+  final minutes = (safeSeconds % 3600) ~/ 60;
+  final seconds = safeSeconds % 60;
+
+  if (hours > 0) {
+    if (minutes == 0 && seconds == 0) {
+      return '$hours giờ 00 phút 00 giây';
+    }
+
+    return '$hours giờ $minutes phút ${seconds.toString().padLeft(2, '0')} giây';
+  }
+
+  if (minutes > 0) {
+    return '$minutes phút ${seconds.toString().padLeft(2, '0')} giây';
+  }
+
+  if (seconds > 0) {
+    return '$seconds giây';
+  }
+
+  return '0 giây';
 }

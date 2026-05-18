@@ -24,11 +24,9 @@ class BookDetailPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ChangeNotifierProvider(
-      create: (_) => BookDetailViewModel(
-        user: user,
-        userBookId: userBookId,
-        token: token,
-      )..loadDetail(),
+      create: (_) =>
+          BookDetailViewModel(user: user, userBookId: userBookId, token: token)
+            ..loadDetail(),
       child: _BookDetailView(user: user, token: token),
     );
   }
@@ -47,7 +45,10 @@ class _BookDetailView extends StatefulWidget {
 class _BookDetailViewState extends State<_BookDetailView> {
   bool _didChange = false;
 
-  Future<void> _openEdit(BuildContext context, BookDetailViewModel viewModel) async {
+  Future<void> _openEdit(
+    BuildContext context,
+    BookDetailViewModel viewModel,
+  ) async {
     final detail = viewModel.detail;
     if (detail == null) return;
 
@@ -68,7 +69,10 @@ class _BookDetailViewState extends State<_BookDetailView> {
     }
   }
 
-  Future<void> _startReading(BuildContext context, BookDetailViewModel viewModel) async {
+  Future<void> _startReading(
+    BuildContext context,
+    BookDetailViewModel viewModel,
+  ) async {
     final success = await viewModel.startReading();
     if (!context.mounted) return;
 
@@ -90,9 +94,9 @@ class _BookDetailViewState extends State<_BookDetailView> {
         ),
       );
     } else if (viewModel.errorMessage != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(viewModel.errorMessage!)),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(viewModel.errorMessage!)));
     }
   }
 
@@ -219,7 +223,8 @@ class _BookDetailViewState extends State<_BookDetailView> {
                         ),
                         child: ClipRRect(
                           borderRadius: BorderRadius.circular(34),
-                          child: detail.coverImageUrl != null &&
+                          child:
+                              detail.coverImageUrl != null &&
                                   detail.coverImageUrl!.isNotEmpty
                               ? Padding(
                                   padding: const EdgeInsets.all(14),
@@ -227,7 +232,9 @@ class _BookDetailViewState extends State<_BookDetailView> {
                                     detail.coverImageUrl!,
                                     fit: BoxFit.contain,
                                     errorBuilder: (_, error, stackTrace) =>
-                                        _DetailCoverFallback(title: detail.title),
+                                        _DetailCoverFallback(
+                                          title: detail.title,
+                                        ),
                                   ),
                                 )
                               : _DetailCoverFallback(title: detail.title),
@@ -250,7 +257,8 @@ class _BookDetailViewState extends State<_BookDetailView> {
                     const SizedBox(height: 24),
                     _DetailBlock(
                       title: 'Ghi chú',
-                      trailing: detail.note == null || detail.note!.trim().isEmpty
+                      trailing:
+                          detail.note == null || detail.note!.trim().isEmpty
                           ? null
                           : const _NoteTag(label: 'Note'),
                       child: Text(
@@ -318,18 +326,16 @@ class _BookMetaSection extends StatelessWidget {
           spacing: 12,
           children: [
             _MetaChip(icon: Icons.person_outline_rounded, text: detail.author),
-            if (detail.readingYear != null)
-              _MetaChip(
-                icon: Icons.calendar_today_rounded,
-                text: '${detail.readingYear}',
-              ),
             if (detail.publishedYear != null)
               _MetaChip(
                 icon: Icons.auto_stories_outlined,
                 text: 'Published ${detail.publishedYear}',
               ),
             if (detail.startDate != null && detail.startDate!.isNotEmpty)
-              _MetaChip(icon: Icons.play_circle_outline_rounded, text: detail.startDate!),
+              _MetaChip(
+                icon: Icons.play_circle_outline_rounded,
+                text: detail.startDate!,
+              ),
             if (detail.finishDate != null && detail.finishDate!.isNotEmpty)
               _MetaChip(
                 icon: Icons.check_circle_outline_rounded,
@@ -376,11 +382,7 @@ class _MetaChip extends StatelessWidget {
 }
 
 class _DetailBlock extends StatelessWidget {
-  const _DetailBlock({
-    required this.title,
-    required this.child,
-    this.trailing,
-  });
+  const _DetailBlock({required this.title, required this.child, this.trailing});
 
   final String title;
   final Widget child;

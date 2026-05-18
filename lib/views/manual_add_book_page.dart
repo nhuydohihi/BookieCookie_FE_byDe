@@ -61,7 +61,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
   final _titleController = TextEditingController();
   final _authorController = TextEditingController();
   final _noteController = TextEditingController();
-  final _readingYearController = TextEditingController();
   final _startDateController = TextEditingController();
   final _finishDateController = TextEditingController();
   final _onlineSearchController = TextEditingController();
@@ -86,7 +85,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
       _titleController.text = initialBook.title;
       _authorController.text = initialBook.author;
       _noteController.text = initialBook.note ?? '';
-      _readingYearController.text = initialBook.readingYear?.toString() ?? '';
       _startDateController.text = initialBook.startDate ?? '';
       _finishDateController.text = initialBook.finishDate ?? '';
       _selectedStatus = initialBook.status;
@@ -108,20 +106,42 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
     _titleController.dispose();
     _authorController.dispose();
     _noteController.dispose();
-    _readingYearController.dispose();
     _startDateController.dispose();
     _finishDateController.dispose();
     _onlineSearchController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickDate(TextEditingController controller) async {
+  DateTime? _tryParseIsoDate(String? value) {
+    final text = value?.trim() ?? '';
+    if (text.isEmpty) {
+      return null;
+    }
+
+    return DateTime.tryParse(text);
+  }
+
+  Future<void> _pickDate(
+    TextEditingController controller, {
+    DateTime? firstDate,
+  }) async {
     final now = DateTime.now();
+    final currentValue = _tryParseIsoDate(controller.text);
+    final minimumDate = firstDate ?? DateTime(1900);
+    final maximumDate = DateTime(now.year + 20);
+    final initialDate = currentValue == null
+        ? now
+        : currentValue.isBefore(minimumDate)
+        ? minimumDate
+        : currentValue.isAfter(maximumDate)
+        ? maximumDate
+        : currentValue;
+
     final pickedDate = await showDatePicker(
       context: context,
-      initialDate: now,
-      firstDate: DateTime(1900),
-      lastDate: DateTime(now.year + 20),
+      initialDate: initialDate,
+      firstDate: minimumDate,
+      lastDate: maximumDate,
       builder: (context, child) {
         return Theme(
           data: Theme.of(context).copyWith(
@@ -185,9 +205,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
     final note = _noteController.text.trim().isEmpty
         ? null
         : _noteController.text.trim();
-    final readingYear = _readingYearController.text.trim().isEmpty
-        ? null
-        : int.tryParse(_readingYearController.text.trim());
     final startDate = _startDateController.text.trim().isEmpty
         ? null
         : _startDateController.text.trim();
@@ -202,7 +219,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
             status: _selectedStatus,
             rating: _selectedRating,
             note: note,
-            readingYear: readingYear,
             startDate: startDate,
             finishDate: finishDate,
             coverImagePath: _selectedCoverImage?.path,
@@ -214,7 +230,6 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
             status: _selectedStatus,
             rating: _selectedRating,
             note: note,
-            readingYear: readingYear,
             startDate: startDate,
             finishDate: finishDate,
             coverImagePath: _selectedCoverImage?.path,
@@ -252,7 +267,9 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                       const Spacer(),
                       if (!isSearchOnly)
                         _TopIconButton(
-                          icon: isEditing ? Icons.check_rounded : Icons.add_rounded,
+                          icon: isEditing
+                              ? Icons.check_rounded
+                              : Icons.add_rounded,
                           onTap: viewModel.isSubmitting
                               ? null
                               : () => _submit(viewModel),
@@ -279,7 +296,9 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                             const SizedBox(height: 10),
                             Center(
                               child: GestureDetector(
-                                onTap: viewModel.isSubmitting ? null : _pickCoverImage,
+                                onTap: viewModel.isSubmitting
+                                    ? null
+                                    : _pickCoverImage,
                                 child: Container(
                                   width: 120,
                                   height: 150,
@@ -311,13 +330,15 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                             const SizedBox(height: 12),
                             Center(
                               child: TextButton.icon(
-                                onPressed: viewModel.isSubmitting ? null : _pickCoverImage,
+                                onPressed: viewModel.isSubmitting
+                                    ? null
+                                    : _pickCoverImage,
                                 icon: const Icon(Icons.photo_library_rounded),
                                 label: Text(
                                   _selectedCoverImage == null
                                       ? _selectedOnlineCoverUrl == null
-                                          ? 'Choose cover from gallery'
-                                          : 'Replace online cover'
+                                            ? 'Choose cover from gallery'
+                                            : 'Replace online cover'
                                       : 'Change cover',
                                 ),
                               ),
@@ -361,36 +382,13 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                             ),
                             const SizedBox(height: 18),
                             const _FieldLabel('Rating'),
-                            _BookDropdownField<int?>(
-                              initialValue: _selectedRating,
-                              hint: 'Select rating',
-                              items: [
-                                const DropdownMenuItem<int?>(
-                                  value: null,
-                                  child: Text('No rating'),
-                                ),
-                                ...List.generate(
-                                  5,
-                                  (index) => DropdownMenuItem<int?>(
-                                    value: index + 1,
-                                    child: Text(
-                                      '${index + 1} star${index == 0 ? '' : 's'}',
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            _RatingSelector(
+                              selectedRating: _selectedRating,
                               onChanged: (value) {
                                 setState(() {
                                   _selectedRating = value;
                                 });
                               },
-                            ),
-                            const SizedBox(height: 18),
-                            const _FieldLabel('Reading Year'),
-                            _BookTextField(
-                              controller: _readingYearController,
-                              hintText: 'e.g. 2026',
-                              keyboardType: TextInputType.number,
                             ),
                             const SizedBox(height: 18),
                             const _FieldLabel('Start Date'),
@@ -407,8 +405,29 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                               controller: _finishDateController,
                               hintText: 'YYYY-MM-DD',
                               readOnly: true,
-                              onTap: () => _pickDate(_finishDateController),
+                              onTap: () => _pickDate(
+                                _finishDateController,
+                                firstDate: _tryParseIsoDate(
+                                  _startDateController.text,
+                                ),
+                              ),
                               suffixIcon: Icons.calendar_month_rounded,
+                              validator: (value) {
+                                final finishDate = _tryParseIsoDate(value);
+                                final startDate = _tryParseIsoDate(
+                                  _startDateController.text,
+                                );
+
+                                if (finishDate == null || startDate == null) {
+                                  return null;
+                                }
+
+                                if (!finishDate.isAfter(startDate)) {
+                                  return 'Finish date must be after start date';
+                                }
+
+                                return null;
+                              },
                             ),
                             const SizedBox(height: 18),
                             const _FieldLabel('Note'),
@@ -459,7 +478,9 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                                         ),
                                       )
                                     : Text(
-                                        isEditing ? 'Save Changes' : 'Create Book',
+                                        isEditing
+                                            ? 'Save Changes'
+                                            : 'Create Book',
                                         style: TextStyle(
                                           fontSize: 16,
                                           fontWeight: FontWeight.w800,
@@ -473,7 +494,9 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                             Text(
                               'Tap a result to open the manual form with book information filled in.',
                               style: TextStyle(
-                                color: AppColors.darkBrown.withValues(alpha: 0.72),
+                                color: AppColors.darkBrown.withValues(
+                                  alpha: 0.72,
+                                ),
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
                                 height: 1.4,
@@ -523,10 +546,7 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
       return Stack(
         fit: StackFit.expand,
         children: [
-          Image.file(
-            File(_selectedCoverImage!.path),
-            fit: BoxFit.cover,
-          ),
+          Image.file(File(_selectedCoverImage!.path), fit: BoxFit.cover),
           Positioned(
             top: 10,
             right: 10,
@@ -543,10 +563,7 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                           _selectedCoverImage = null;
                         });
                       },
-                icon: const Icon(
-                  Icons.close_rounded,
-                  color: Colors.white,
-                ),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
                 iconSize: 18,
                 splashRadius: 18,
               ),
@@ -581,10 +598,7 @@ class _ManualAddBookViewState extends State<_ManualAddBookView> {
                           _selectedOnlineCoverUrl = null;
                         });
                       },
-                icon: const Icon(
-                  Icons.close_rounded,
-                  color: Colors.white,
-                ),
+                icon: const Icon(Icons.close_rounded, color: Colors.white),
                 iconSize: 18,
                 splashRadius: 18,
               ),
@@ -695,10 +709,7 @@ class _OnlineSearchSection extends StatelessWidget {
 }
 
 class _OnlineBookCard extends StatelessWidget {
-  const _OnlineBookCard({
-    required this.book,
-    required this.onTap,
-  });
+  const _OnlineBookCard({required this.book, required this.onTap});
 
   final GoogleBookSearchResult book;
   final VoidCallback onTap;
@@ -717,7 +728,9 @@ class _OnlineBookCard extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.primary.withValues(alpha: 0.12)),
+            border: Border.all(
+              color: AppColors.primary.withValues(alpha: 0.12),
+            ),
             boxShadow: [
               BoxShadow(
                 color: AppColors.primary.withValues(alpha: 0.08),
@@ -745,13 +758,16 @@ class _OnlineBookCard extends StatelessWidget {
                       : Image.network(
                           coverUrl,
                           fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            color: AppColors.primary.withValues(alpha: 0.10),
-                            child: const Icon(
-                              Icons.menu_book_rounded,
-                              color: AppColors.primary,
-                            ),
-                          ),
+                          errorBuilder: (context, error, stackTrace) =>
+                              Container(
+                                color: AppColors.primary.withValues(
+                                  alpha: 0.10,
+                                ),
+                                child: const Icon(
+                                  Icons.menu_book_rounded,
+                                  color: AppColors.primary,
+                                ),
+                              ),
                         ),
                 ),
               ),
@@ -885,7 +901,6 @@ class _BookTextField extends StatelessWidget {
     required this.hintText,
     this.validator,
     this.maxLines = 1,
-    this.keyboardType,
     this.readOnly = false,
     this.onTap,
     this.suffixIcon,
@@ -895,7 +910,6 @@ class _BookTextField extends StatelessWidget {
   final String hintText;
   final String? Function(String?)? validator;
   final int maxLines;
-  final TextInputType? keyboardType;
   final bool readOnly;
   final VoidCallback? onTap;
   final IconData? suffixIcon;
@@ -906,7 +920,6 @@ class _BookTextField extends StatelessWidget {
       controller: controller,
       validator: validator,
       maxLines: maxLines,
-      keyboardType: keyboardType,
       readOnly: readOnly,
       onTap: onTap,
       style: const TextStyle(
@@ -990,6 +1003,58 @@ class _BookDropdownField<T> extends StatelessWidget {
         ),
         decoration: const InputDecoration(border: InputBorder.none),
         hint: hint == null ? null : Text(hint!),
+      ),
+    );
+  }
+}
+
+class _RatingSelector extends StatelessWidget {
+  const _RatingSelector({
+    required this.selectedRating,
+    required this.onChanged,
+  });
+
+  final int? selectedRating;
+  final ValueChanged<int?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: AppColors.primary.withValues(alpha: 0.10)),
+      ),
+      child: Row(
+        children: [
+          ...List.generate(5, (index) {
+            final starNumber = index + 1;
+            final isFilled = (selectedRating ?? 0) >= starNumber;
+
+            return Padding(
+              padding: EdgeInsets.only(right: index == 4 ? 0 : 10),
+              child: InkWell(
+                onTap: () =>
+                    onChanged(selectedRating == starNumber ? null : starNumber),
+                borderRadius: BorderRadius.circular(999),
+                child: Padding(
+                  padding: const EdgeInsets.all(4),
+                  child: Icon(
+                    isFilled ? Icons.star_rounded : Icons.star_border_rounded,
+                    color: AppColors.secondary,
+                    size: 30,
+                  ),
+                ),
+              ),
+            );
+          }),
+          const Spacer(),
+          TextButton(
+            onPressed: selectedRating == null ? null : () => onChanged(null),
+            child: const Text('Clear'),
+          ),
+        ],
       ),
     );
   }

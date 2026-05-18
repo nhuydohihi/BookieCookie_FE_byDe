@@ -86,22 +86,32 @@ class DashboardStatistics {
 
 class TodayStatistics {
   const TodayStatistics({
-    required this.minutes,
+    required this.seconds,
     required this.pagesRead,
-    required this.goalMinutes,
+    required this.goalSeconds,
     required this.progress,
   });
 
-  final int minutes;
+  final int seconds;
   final int pagesRead;
-  final int goalMinutes;
+  final int goalSeconds;
   final double progress;
 
+  int get minutes => seconds ~/ 60;
+  int get goalMinutes => goalSeconds ~/ 60;
+
   factory TodayStatistics.fromJson(Map<String, dynamic> json) {
+    final parsedSeconds = json.containsKey('seconds')
+        ? _toInt(json['seconds'])
+        : _toInt(json['minutes']) * 60;
+    final parsedGoalSeconds = json.containsKey('goal_seconds')
+        ? _toInt(json['goal_seconds'])
+        : _toInt(json['goal_minutes']) * 60;
+
     return TodayStatistics(
-      minutes: _toInt(json['minutes']),
+      seconds: parsedSeconds,
       pagesRead: _toInt(json['pages_read']),
-      goalMinutes: _toInt(json['goal_minutes']),
+      goalSeconds: parsedGoalSeconds,
       progress: _toDouble(json['progress']),
     );
   }
@@ -111,22 +121,28 @@ class WeekdayStatistics {
   const WeekdayStatistics({
     required this.label,
     required this.shortLabel,
-    required this.minutes,
+    required this.seconds,
     required this.pagesRead,
     this.date,
   });
 
   final String label;
   final String shortLabel;
-  final int minutes;
+  final int seconds;
   final int pagesRead;
   final DateTime? date;
 
+  int get minutes => seconds ~/ 60;
+
   factory WeekdayStatistics.fromJson(Map<String, dynamic> json) {
+    final parsedSeconds = json.containsKey('seconds')
+        ? _toInt(json['seconds'])
+        : _toInt(json['minutes']) * 60;
+
     return WeekdayStatistics(
       label: json['label'] as String? ?? '',
       shortLabel: json['short_label'] as String? ?? '',
-      minutes: _toInt(json['minutes']),
+      seconds: parsedSeconds,
       pagesRead: _toInt(json['pages_read']),
       date: _toDateTime(json['date']),
     );
@@ -137,6 +153,7 @@ class YearStatistics {
   const YearStatistics({
     required this.readingHours,
     required this.readingMinutes,
+    required this.readingSeconds,
     required this.booksFinished,
     required this.quotesSaved,
     required this.currentReadingCount,
@@ -149,6 +166,7 @@ class YearStatistics {
 
   final int readingHours;
   final int readingMinutes;
+  final int readingSeconds;
   final int booksFinished;
   final int quotesSaved;
   final int currentReadingCount;
@@ -160,10 +178,14 @@ class YearStatistics {
 
   factory YearStatistics.fromJson(Map<String, dynamic> json) {
     final activityJson = json['yearly_activity_levels'] as List<dynamic>? ?? [];
+    final parsedReadingSeconds = json.containsKey('reading_seconds')
+        ? _toInt(json['reading_seconds'])
+        : _toInt(json['reading_minutes']) * 60;
 
     return YearStatistics(
       readingHours: _toInt(json['reading_hours']),
       readingMinutes: _toInt(json['reading_minutes']),
+      readingSeconds: parsedReadingSeconds,
       booksFinished: _toInt(json['books_finished']),
       quotesSaved: _toInt(json['quotes_saved']),
       currentReadingCount: _toInt(json['current_reading_count']),
@@ -205,22 +227,28 @@ class ReadingChartPoint {
   const ReadingChartPoint({
     required this.label,
     required this.shortLabel,
-    required this.minutes,
+    required this.seconds,
     required this.pagesRead,
     this.date,
   });
 
   final String label;
   final String shortLabel;
-  final int minutes;
+  final int seconds;
   final int pagesRead;
   final DateTime? date;
 
+  int get minutes => seconds ~/ 60;
+
   factory ReadingChartPoint.fromJson(Map<String, dynamic> json) {
+    final parsedSeconds = json.containsKey('seconds')
+        ? _toInt(json['seconds'])
+        : _toInt(json['minutes']) * 60;
+
     return ReadingChartPoint(
       label: json['label'] as String? ?? '',
       shortLabel: json['short_label'] as String? ?? '',
-      minutes: _toInt(json['minutes']),
+      seconds: parsedSeconds,
       pagesRead: _toInt(json['pages_read']),
       date: _toDateTime(json['date']),
     );

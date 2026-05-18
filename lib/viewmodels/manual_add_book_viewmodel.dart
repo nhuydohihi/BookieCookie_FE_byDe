@@ -27,7 +27,6 @@ class ManualAddBookViewModel extends ChangeNotifier {
     String status = 'plan_to_read',
     int? rating,
     String? note,
-    int? readingYear,
     String? startDate,
     String? finishDate,
     String? coverImagePath,
@@ -45,7 +44,6 @@ class ManualAddBookViewModel extends ChangeNotifier {
           'author': author ?? '',
           'status': status,
           'rating': rating?.toString() ?? '',
-          'reading_year': readingYear?.toString() ?? '',
           'start_date': startDate ?? '',
           'finish_date': finishDate ?? '',
           'note': note ?? '',
@@ -78,7 +76,6 @@ class ManualAddBookViewModel extends ChangeNotifier {
     String status = 'plan_to_read',
     int? rating,
     String? note,
-    int? readingYear,
     String? startDate,
     String? finishDate,
     String? coverImagePath,
@@ -96,7 +93,6 @@ class ManualAddBookViewModel extends ChangeNotifier {
           'author': author ?? '',
           'status': status,
           'rating': rating?.toString() ?? '',
-          'reading_year': readingYear?.toString() ?? '',
           'start_date': startDate ?? '',
           'finish_date': finishDate ?? '',
           'note': note ?? '',
@@ -147,7 +143,11 @@ class ManualAddBookViewModel extends ChangeNotifier {
       if (items is List) {
         searchResults = items
             .whereType<Map>()
-            .map((item) => GoogleBookSearchResult.fromJson(Map<String, dynamic>.from(item)))
+            .map(
+              (item) => GoogleBookSearchResult.fromJson(
+                Map<String, dynamic>.from(item),
+              ),
+            )
             .where((book) => book.title.trim().isNotEmpty)
             .toList();
       } else {

@@ -247,7 +247,7 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
                         const _StatisticHeader(),
                         const SizedBox(height: 20),
                         _TodayGoalCard(
-                          minutes: minuteGoal.minutes,
+                          seconds: minuteGoal.seconds,
                           progress: minuteGoal.progress,
                           streakDays: dashboard?.streakDays ?? 0,
                           isLoading: homeVM.isLoading,
@@ -261,7 +261,7 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
                         _WeekStrip(
                           stats: weekStats,
                           selectedIndex: selectedDayIndex,
-                          todayHasRead: minuteGoal.minutes > 0,
+                          todayHasRead: minuteGoal.seconds > 0,
                         ),
                         const SizedBox(height: 28),
                         _ReadingTimeChartCard(
@@ -306,7 +306,7 @@ class _StatisticPageViewState extends State<_StatisticPageView> {
                         if (!homeVM.isLoading) ...[
                           const SizedBox(height: 18),
                           Text(
-                            'Selected day: ${selectedStat.label} • ${selectedStat.minutes} min',
+                            'Selected day: ${selectedStat.label} • ${_formatDurationCompact(selectedStat.seconds)}',
                             style: TextStyle(
                               color: AppColors.darkBrown.withValues(alpha: 0.7),
                               fontWeight: FontWeight.w700,
@@ -533,20 +533,20 @@ class _StatisticHeader extends StatelessWidget {
 
 class _TodayGoalCard extends StatelessWidget {
   const _TodayGoalCard({
-    required this.minutes,
+    required this.seconds,
     required this.progress,
     required this.streakDays,
     required this.isLoading,
   });
 
-  final int minutes;
+  final int seconds;
   final double progress;
   final int streakDays;
   final bool isLoading;
 
   @override
   Widget build(BuildContext context) {
-    final hasReadToday = minutes > 0;
+    final hasReadToday = seconds > 0;
 
     return Container(
       width: double.infinity,
@@ -593,16 +593,17 @@ class _TodayGoalCard extends StatelessWidget {
                       )
                     else ...[
                       Text(
-                        '$minutes',
+                        _formatDurationCompact(seconds),
                         style: const TextStyle(
                           color: AppColors.darkBlue,
-                          fontSize: 46,
+                          fontSize: 34,
                           fontWeight: FontWeight.w800,
                         ),
+                        textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'minutes',
+                        'read today',
                         style: TextStyle(
                           color: AppColors.darkBrown.withValues(alpha: 0.78),
                           fontSize: 18,
@@ -755,7 +756,7 @@ class _ReadingTimeChartCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final totalMinutes = chartData.points.fold<int>(
       0,
-      (sum, point) => sum + point.minutes,
+      (sum, point) => sum + point.seconds,
     );
 
     return Container(
@@ -816,17 +817,17 @@ class _ReadingTimeChartCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    '$totalMinutes',
+                    _formatDurationCompact(totalMinutes),
                     style: const TextStyle(
                       color: AppColors.secondary,
-                      fontSize: 38,
+                      fontSize: 32,
                       fontWeight: FontWeight.w800,
                     ),
                   ),
                   Text(
                     selectedRange == _ChartRange.week
-                        ? 'mins this week'
-                        : 'mins this month',
+                        ? 'this week'
+                        : 'this month',
                     style: TextStyle(
                       color: AppColors.darkBrown.withValues(alpha: 0.68),
                       fontSize: 14,
@@ -1134,7 +1135,7 @@ class _WeekStrip extends StatelessWidget {
             children: List.generate(stats.length, (index) {
               final item = stats[index];
               final isSelected = index == selectedIndex;
-              final hasRead = isSelected ? todayHasRead : item.minutes > 0;
+              final hasRead = isSelected ? todayHasRead : item.seconds > 0;
 
               return Expanded(
                 child: Padding(
@@ -1401,10 +1402,10 @@ class _LineChartPainter extends CustomPainter {
     final chartWidth = size.width - padding.left - padding.right;
     final chartHeight = size.height - padding.top - padding.bottom;
     final maxMinutes = math.max(
-      20,
+      60,
       points.fold<int>(
         0,
-        (maxValue, point) => math.max(maxValue, point.minutes),
+        (maxValue, point) => math.max(maxValue, point.seconds),
       ),
     );
 
@@ -1432,7 +1433,7 @@ class _LineChartPainter extends CustomPainter {
       final dy =
           padding.top +
           chartHeight -
-          (points[index].minutes / maxMinutes) * chartHeight;
+          (points[index].seconds / maxMinutes) * chartHeight;
       final spot = Offset(dx, dy);
       spots.add(spot);
 
@@ -1551,9 +1552,9 @@ class _ArcProgressPainter extends CustomPainter {
 }
 
 class _TodayGoalData {
-  const _TodayGoalData({required this.minutes, required this.progress});
+  const _TodayGoalData({required this.seconds, required this.progress});
 
-  final int minutes;
+  final int seconds;
   final double progress;
 }
 
@@ -1563,14 +1564,14 @@ class _DayStat {
     required this.shortLabel,
     required this.dayOfMonth,
     required this.date,
-    required this.minutes,
+    required this.seconds,
   });
 
   final String label;
   final String shortLabel;
   final int dayOfMonth;
   final DateTime date;
-  final int minutes;
+  final int seconds;
 }
 
 enum _ChartRange { week, month }
@@ -1579,12 +1580,12 @@ class _ChartPoint {
   const _ChartPoint({
     required this.label,
     required this.shortLabel,
-    required this.minutes,
+    required this.seconds,
   });
 
   final String label;
   final String shortLabel;
-  final int minutes;
+  final int seconds;
 }
 
 class _ChartData {
@@ -1595,13 +1596,13 @@ class _ChartData {
 
 _TodayGoalData _buildTodayGoal(HomeDashboardModel? dashboard) {
   final todayStats = dashboard?.statistics?.today;
-  final minutes = todayStats?.minutes ?? 0;
+  final seconds = todayStats?.seconds ?? 0;
   final progress =
-      todayStats?.goalMinutes == null || todayStats!.goalMinutes <= 0
+      todayStats?.goalSeconds == null || todayStats!.goalSeconds <= 0
       ? 0.0
       : todayStats.progress.clamp(0, 1).toDouble();
 
-  return _TodayGoalData(minutes: minutes, progress: progress);
+  return _TodayGoalData(seconds: seconds, progress: progress);
 }
 
 List<_DayStat> _buildWeekStats(HomeDashboardModel? dashboard) {
@@ -1616,7 +1617,7 @@ List<_DayStat> _buildWeekStats(HomeDashboardModel? dashboard) {
             shortLabel: item.shortLabel,
             dayOfMonth: item.date?.day ?? 0,
             date: item.date ?? DateTime.now(),
-            minutes: item.minutes,
+            seconds: item.seconds,
           ),
         )
         .toList();
@@ -1634,7 +1635,7 @@ List<_DayStat> _buildWeekStats(HomeDashboardModel? dashboard) {
           shortLabel: entry.value.substring(0, 2),
           dayOfMonth: startOfWeek.add(Duration(days: entry.key)).day,
           date: startOfWeek.add(Duration(days: entry.key)),
-          minutes: 0,
+          seconds: 0,
         ),
       )
       .toList();
@@ -1665,7 +1666,7 @@ _ChartData _buildChartData(HomeDashboardModel? dashboard, _ChartRange range) {
           (item) => _ChartPoint(
             label: item.label,
             shortLabel: item.shortLabel,
-            minutes: item.minutes,
+            seconds: item.seconds,
           ),
         )
         .toList(),
@@ -1678,6 +1679,27 @@ int _buildYearlyGoal(HomeDashboardModel? dashboard) {
       dashboard?.goals?.yearlyBooks ??
       0;
   return goal;
+}
+
+String _formatDurationCompact(int totalSeconds) {
+  final safeSeconds = math.max(totalSeconds, 0);
+  final hours = safeSeconds ~/ 3600;
+  final minutes = (safeSeconds % 3600) ~/ 60;
+  final seconds = safeSeconds % 60;
+
+  if (hours > 0) {
+    if (minutes == 0) {
+      return '${hours}h';
+    }
+
+    return '${hours}h ${minutes}m';
+  }
+
+  if (minutes > 0) {
+    return '${minutes}m ${seconds.toString().padLeft(2, '0')}s';
+  }
+
+  return '${seconds}s';
 }
 
 ChallengeOverview _buildChallengeOverview(HomeDashboardModel? dashboard) {
